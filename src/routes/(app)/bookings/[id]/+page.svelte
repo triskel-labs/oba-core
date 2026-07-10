@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import { withToast } from '$lib/utils/enhance';
 	import { DOT_COLORS } from '$lib/features/services/colors';
+	import { paymentBadge } from '$lib/features/bookings/statusBadges';
 	import type { ServiceColorKey } from '$lib/features/services/colors';
 	import { Zap, Waves, User } from 'lucide-svelte';
 	import type { ActionData, PageData } from './$types';
@@ -344,17 +345,13 @@
 					<div class="mb-3 flex flex-col gap-1.5">
 						{#each participants as p (p.id)}
 							{@const amountDue = parseFloat(bookingClient.amountDue) / Math.max(participants.length, 1)}
+							{@const participantPaymentBadge = paymentBadge(p.paymentStatus)}
 							<div class="overflow-hidden rounded-lg border border-gray-100">
 								<div class="flex items-center justify-between px-3 py-2">
 									<span class="text-xs font-semibold text-gray-800">{p.name}</span>
 									<div class="flex items-center gap-2">
 										<span class="text-xs text-gray-600">€{parseFloat(p.amountPaid).toFixed(2)}</span>
-										<span class="rounded-full px-1.5 py-0.5 text-[8px] font-semibold
-											{p.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' :
-											 p.paymentStatus === 'partial' ? 'bg-amber-100 text-amber-700' :
-											 'bg-gray-100 text-gray-500'}">
-											{p.paymentStatus}
-										</span>
+										<StatusBadge variant={participantPaymentBadge.variant} label={participantPaymentBadge.label} class="px-1.5 text-[8px]" />
 										<button type="button" onclick={() => expandedPaymentId = expandedPaymentId === p.id ? null : p.id}
 											class="text-[10px] text-muted hover:text-gray-700">✎</button>
 									</div>
@@ -382,15 +379,11 @@
 					</div>
 				{:else}
 					<!-- Flat payment row -->
+					{@const clientPaymentBadge = paymentBadge(bookingClient.paymentStatus)}
 					<div class="mb-3">
 						<div class="mb-1.5 flex items-center justify-between px-1">
 							<span class="text-xs font-semibold text-gray-800">{bookingClient.clientFirstName} {bookingClient.clientLastName}</span>
-							<span class="rounded-full px-2 py-0.5 text-[9px] font-semibold
-								{bookingClient.paymentStatus === 'paid' ? 'bg-green-100 text-green-700' :
-								 bookingClient.paymentStatus === 'partial' ? 'bg-amber-100 text-amber-700' :
-								 'bg-gray-100 text-gray-500'}">
-								{bookingClient.paymentStatus}
-							</span>
+							<StatusBadge variant={clientPaymentBadge.variant} label={clientPaymentBadge.label} class="px-2 text-[9px]" />
 						</div>
 						<form method="post" action="?/updatePayment" use:enhance={withToast()} class="flex items-center gap-2 px-1">
 							<input type="hidden" name="bookingClientId" value={bookingClient.id} />

@@ -3,7 +3,7 @@
 	import { enhance } from '$app/forms';
 	import { withToast } from '$lib/utils/enhance';
 	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
-	import type { StatusVariant } from '$lib/components/ui/StatusBadge.svelte';
+	import type { StatusVariant } from '$lib/components/ui/statusBadge';
 
 	let {
 		clientName,

@@ -39,7 +39,7 @@ export const pricingModeEnum = pgEnum('pricing_mode', [
 	'per_half_day'
 ]);
 
-export const sessionStatusEnum = pgEnum('session_status', ['unscheduled', 'scheduled', 'cancelled']);
+export const sessionStatusEnum = pgEnum('session_status', ['unscheduled', 'scheduled', 'completed', 'cancelled']);
 export const sessionOwnerTypeEnum = pgEnum('session_owner_type', ['booking', 'service', 'edition']);
 export const bookingClientStatusEnum = pgEnum('booking_client_status', ['enrolled', 'cancelled']);
 export const trackingModeEnum = pgEnum('tracking_mode', ['pool', 'specific']);

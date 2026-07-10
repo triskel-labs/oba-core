@@ -1,27 +1,24 @@
 <!-- src/lib/components/ui/StatusBadge.svelte -->
 <script lang="ts">
-	export type StatusVariant =
-		| 'confirmed' | 'pending' | 'cancelled'
-		| 'paid' | 'partial'
-		| 'active' | 'completed' | 'unscheduled'
-		| 'beginner' | 'intermediate' | 'advanced'
-		| 'admin' | 'owner' | 'manager' | 'instructor' | 'banned'
-		| 'pool' | 'specific';
+	import type { StatusVariant } from './statusBadge';
 
 	const COLORS: Record<StatusVariant, string> = {
 		confirmed:    'bg-green-100 text-green-700',
 		paid:         'bg-green-100 text-green-700',
 		advanced:     'bg-green-100 text-green-700',
 		completed:    'bg-green-100 text-green-700',
+		attended:     'bg-green-100 text-green-700',
 		instructor:   'bg-green-100 text-green-700',
 		pending:      'bg-amber-100 text-amber-700',
 		partial:      'bg-amber-100 text-amber-700',
 		intermediate: 'bg-amber-100 text-amber-700',
 		unscheduled:  'bg-amber-100 text-amber-700',
 		cancelled:    'bg-red-100 text-red-600',
+		missed:       'bg-red-100 text-red-600',
 		banned:       'bg-red-100 text-red-600',
 		admin:        'bg-red-100 text-red-700',
 		active:       'bg-blue-100 text-blue-700',
+		scheduled:    'bg-blue-100 text-blue-700',
 		beginner:     'bg-blue-100 text-blue-700',
 		owner:        'bg-blue-100 text-blue-700',
 		pool:         'bg-blue-100 text-blue-700',
@@ -36,7 +33,10 @@
 		paid:         'pagado',
 		partial:      'parcial',
 		active:       'activa',
+		scheduled:    'programada',
 		completed:    'completada',
+		attended:     'asistió',
+		missed:       'no asistió',
 		unscheduled:  'sin horario',
 		beginner:     'principiante',
 		intermediate: 'intermedio',

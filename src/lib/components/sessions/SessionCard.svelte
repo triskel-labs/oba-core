@@ -4,6 +4,7 @@
 	import { withToast } from '$lib/utils/enhance';
 	import type { Session, ClientGroup } from '$lib/features/sessions/types';
 	import type { BookingParticipant } from '$lib/features/bookings/types';
+	import { attendanceBadgeForParticipant } from '$lib/features/bookings/statusBadges';
 	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 
 	interface ServiceColor {
@@ -105,7 +106,7 @@
 		session.status === 'cancelled'   ? 'cancelled'   :
 		session.status === 'completed'   ? 'completed'   :
 		session.status === 'unscheduled' ? 'unscheduled' :
-		'active'
+		'scheduled'
 	);
 
 	function isInSession(bp: BookingParticipant): boolean {
@@ -158,9 +159,13 @@
 				{#each participantPool as bp (bp.id)}
 					{@const inSess = isInSession(bp)}
 					{@const spId = sessionParticipantId(bp)}
+					{@const attendanceBadge = attendanceBadgeForParticipant(session.status, inSess)}
 					{#if inSess}
 						<div class="mb-1 flex items-center justify-between rounded bg-green-50 px-2 py-1">
-							<span class="text-[11px] font-medium text-gray-900">✓ {bp.name}</span>
+							<div class="min-w-0">
+								<span class="block truncate text-[11px] font-medium text-gray-900">✓ {bp.name}</span>
+								<StatusBadge variant={attendanceBadge.variant} label={attendanceBadge.label} class="mt-0.5 px-1.5 text-[8px]" />
+							</div>
 							{#if !isCancelled}
 								<form method="post" action="?/removeParticipant" use:enhance={withToast()}>
 									<input type="hidden" name="participantId" value={spId} />
@@ -176,14 +181,18 @@
 							<input type="hidden" name="sessionId" value={session.id} />
 							<input type="hidden" name="participantName" value={bp.name} />
 							<input type="hidden" name="bookingParticipantId" value={bp.id} />
-							<span class="text-[11px] text-gray-400">○ {bp.name}</span>
+							<div class="min-w-0">
+								<span class="block truncate text-[11px] text-gray-400">○ {bp.name}</span>
+								<StatusBadge variant={attendanceBadge.variant} label={attendanceBadge.label} class="mt-0.5 px-1.5 text-[8px]" />
+							</div>
 							<button type="submit"
 								onclick={(e) => e.stopPropagation()}
 								class="text-[9px] font-semibold text-green-600">add</button>
 						</form>
 					{:else}
 						<div class="mb-1 rounded bg-gray-50 px-2 py-1">
-							<span class="text-[11px] text-gray-400">○ {bp.name}</span>
+							<span class="block truncate text-[11px] text-gray-400">○ {bp.name}</span>
+							<StatusBadge variant={attendanceBadge.variant} label={attendanceBadge.label} class="mt-0.5 px-1.5 text-[8px]" />
 						</div>
 					{/if}
 				{/each}

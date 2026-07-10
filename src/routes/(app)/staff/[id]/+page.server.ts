@@ -1,5 +1,6 @@
 import { error, fail } from '@sveltejs/kit';
 import { requireRole, hasRole, primaryRole } from '$lib/server/permissions';
+import { canManageStaffMember, canViewStaffMember } from '$lib/features/staff/access';
 import type { Role } from '$lib/server/permissions';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
@@ -11,13 +12,17 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params, locals }) => {
 	requireRole(locals, 'admin', 'owner');
 	const [member] = await db.select().from(userTable).where(eq(userTable.id, params.id));
-	if (!member) error(404, 'Staff member not found');
-	return { member, isAdmin: hasRole(locals, 'admin') };
+	if (!member || !canViewStaffMember(locals, member)) error(404, 'Staff member not found');
+	return {
+		member,
+		isAdmin: hasRole(locals, 'admin'),
+		canManageMember: canManageStaffMember(locals, member)
+	};
 };
 
 export const actions: Actions = {
 	updateRole: async ({ request, params, locals }) => {
-		requireRole(locals, 'admin', 'owner');
+		requireRole(locals, 'admin');
 		const isAdmin = hasRole(locals, 'admin');
 		const form = await request.formData();
 		const allowedRoles = isAdmin
@@ -35,7 +40,7 @@ export const actions: Actions = {
 	},
 
 	updateProfile: async ({ request, params, locals }) => {
-		requireRole(locals, 'admin', 'owner');
+		requireRole(locals, 'admin');
 		const form = await request.formData();
 		const phone = form.get('phone')?.toString().trim() || null;
 		const bio = form.get('bio')?.toString().trim() || null;
@@ -47,7 +52,7 @@ export const actions: Actions = {
 	},
 
 	toggleBan: async ({ params, locals }) => {
-		requireRole(locals, 'admin', 'owner');
+		requireRole(locals, 'admin');
 		if (params.id === locals.user?.id) return fail(400, { error: "Can't ban yourself" });
 		const [member] = await db.select().from(userTable).where(eq(userTable.id, params.id));
 		if (!member) error(404);
@@ -56,7 +61,7 @@ export const actions: Actions = {
 	},
 
 	resetPassword: async ({ params, locals, request }) => {
-		requireRole(locals, 'admin', 'owner');
+		requireRole(locals, 'admin');
 		if (params.id === locals.user?.id) return fail(400, { error: "Use settings to change your own password" });
 		const newPassword = generateTempPassword();
 		try {
