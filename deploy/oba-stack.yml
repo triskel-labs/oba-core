@@ -83,7 +83,7 @@ services:
   # OBA Core Application
   # ===========================================================================
   app:
-    image: ghcr.io/dvemolina/oba-core:${IMAGE_TAG:-latest}
+    image: ghcr.io/triskel-labs/oba-core:${IMAGE_TAG:-latest}
     networks:
       - oba_network
       - traefik_network

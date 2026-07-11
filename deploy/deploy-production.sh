@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-IMAGE_NAME="ghcr.io/dvemolina/oba-core"
+IMAGE_NAME="ghcr.io/triskel-labs/oba-core"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 STACK_FILE="$SCRIPT_DIR/oba-stack.yml"
 VPS_HOST="dvemolina@contabo"
