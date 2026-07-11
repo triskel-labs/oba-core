@@ -1,11 +1,29 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { db } from '$lib/server/db';
-import { bookingClients, bookings, services } from '$lib/server/db/schema';
-import { listServices, getService, createService, updateService, deleteService } from './queries';
 
-// Integration tests — require DB running on localhost:5432
-describe('service queries', () => {
+const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
+
+describeWithDatabase('service queries (DB integration)', () => {
+	let db: any;
+	let bookingClients: any;
+	let bookings: any;
+	let services: any;
+	let listServices: any;
+	let getService: any;
+	let createService: any;
+	let updateService: any;
+	let deleteService: any;
+
 	beforeEach(async () => {
+		if (!db) {
+			const dbModule = await import('$lib/server/db');
+			const schema = await import('$lib/server/db/schema');
+			const queries = await import('./queries');
+
+			db = dbModule.db;
+			({ bookingClients, bookings, services } = schema);
+			({ listServices, getService, createService, updateService, deleteService } = queries);
+		}
+
 		// Delete in FK-safe order: booking_clients → bookings → services
 		await db.delete(bookingClients);
 		await db.delete(bookings);
@@ -33,7 +51,7 @@ describe('service queries', () => {
 		await deleteService(all[0].id); // soft-delete first one
 
 		const active = await listServices();
-		expect(active.every((s) => s.active)).toBe(true);
+		expect(active.every((s: { active: boolean }) => s.active)).toBe(true);
 	});
 
 	it('updates a service', async () => {

@@ -32,7 +32,15 @@ export interface BookingParticipant {
 	name: string;
 	notes: string | null;
 	sortOrder: number;
+	amountPaid: string;
+	paymentStatus: PaymentStatus;
 	createdAt: Date;
+}
+
+export interface BulkAddParticipantsInput {
+	bookingClientId: string;
+	names: string[];
+	syncToSessions: boolean;
 }
 
 export type BookingSource = 'admin' | 'whatsapp_bot';
@@ -114,8 +122,14 @@ export interface ClientBookingSummary {
 	id: string;
 	date: string;
 	time: string | null;
+	serviceId: string | null;
 	serviceName: string | null;
+	serviceColor: string | null;
 	status: BookingStatus;
+	participantCount: number;
+	amountDue: string;
+	amountPaid: string;
+	paymentStatus: PaymentStatus;
 }
 
 export interface CreateBookingInput {

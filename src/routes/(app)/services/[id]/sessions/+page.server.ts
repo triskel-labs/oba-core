@@ -2,6 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import { getService } from '$lib/features/services/queries';
 import {
 	listSessionsForService,
+	listSessionsForEdition,
 	listEnrollmentsForSession,
 	listUnassignedEnrollments,
 	assignBookingToSession,
@@ -10,6 +11,7 @@ import {
 	cancelSession,
 	deleteSession
 } from '$lib/features/sessions/queries';
+import { listEditionsForService, getServiceEdition } from '$lib/features/services/editions.queries';
 import { listInstructors } from '$lib/features/instructors/queries';
 import { requireRole } from '$lib/server/permissions';
 import type { Actions, PageServerLoad } from './$types';
@@ -20,54 +22,87 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 	if (!service) error(404, 'Service not found');
 
 	const m = service.modules ?? {};
-	if (!('sessions' in m) || !('roster' in m) || 'editions' in m) {
-		error(404, 'Sessions page not available for this service type');
+	const hasEditions = 'editions' in m;
+	const hasGroupSessions = 'sessions' in m && 'roster' in m && !hasEditions;
+
+	if (!('sessions' in m)) {
+		error(404, 'Sessions not available for this service type');
 	}
 
+	const editionId = url.searchParams.get('edition') ?? undefined;
 	const from = url.searchParams.get('from') ?? undefined;
-	const to   = url.searchParams.get('to')   ?? undefined;
+	const to = url.searchParams.get('to') ?? undefined;
 
-	const [sessions, instructors] = await Promise.all([
-		listSessionsForService(params.id, from, to),
-		listInstructors()
+	const [instructors, editions] = await Promise.all([
+		listInstructors(),
+		hasEditions ? listEditionsForService(params.id) : Promise.resolve([])
 	]);
 
-	// Enrolled bookings per session
-	const enrollmentsBySession: Record<string, Awaited<ReturnType<typeof listEnrollmentsForSession>>> = {};
-	await Promise.all(
-		sessions.map(async s => {
-			enrollmentsBySession[s.id] = await listEnrollmentsForSession(s.id);
-		})
-	);
+	// If edition service, require an edition param to show sessions
+	let sessions: Awaited<ReturnType<typeof listSessionsForService>> = [];
+	let edition: Awaited<ReturnType<typeof getServiceEdition>> | undefined;
 
-	// Unassigned enrollments per date
+	if (hasEditions && editionId) {
+		edition = await getServiceEdition(editionId);
+		sessions = await listSessionsForEdition(editionId);
+	} else if (!hasEditions) {
+		sessions = await listSessionsForService(params.id, from, to);
+	}
+
+	// Enrolled bookings per session (group/roster mode)
+	const enrollmentsBySession: Record<string, Awaited<ReturnType<typeof listEnrollmentsForSession>>> = {};
+	if (hasGroupSessions) {
+		await Promise.all(
+			sessions.map(async s => {
+				enrollmentsBySession[s.id] = await listEnrollmentsForSession(s.id);
+			})
+		);
+	}
+
+	// Unassigned enrollments per date (group/roster mode)
 	const sessionDates = [...new Set(sessions.map(s => s.date))];
 	const unassignedByDate: Record<string, Awaited<ReturnType<typeof listUnassignedEnrollments>>> = {};
-	await Promise.all(
-		sessionDates.map(async date => {
-			const u = await listUnassignedEnrollments(params.id, date);
-			if (u.length > 0) unassignedByDate[date] = u;
-		})
-	);
+	if (hasGroupSessions) {
+		await Promise.all(
+			sessionDates.map(async date => {
+				const u = await listUnassignedEnrollments(params.id, date);
+				if (u.length > 0) unassignedByDate[date] = u;
+			})
+		);
+	}
 
-	return { service, sessions, instructors, enrollmentsBySession, unassignedByDate };
+	return { service, sessions, instructors, enrollmentsBySession, unassignedByDate, editions, edition, editionId, hasEditions, hasGroupSessions };
 };
 
 export const actions: Actions = {
-	addSession: async ({ request, params, locals }) => {
+	addSession: async ({ request, params, url, locals }) => {
 		requireRole(locals, 'admin', 'owner', 'manager');
 		const form = await request.formData();
 		const date = form.get('date')?.toString();
 		if (!date) return fail(400, { error: 'date required' });
-		await createSession({
-			ownerType: 'service',
-			serviceId: params.id,
+
+		const service = await getService(params.id);
+		if (!service) return fail(404, { error: 'Service not found' });
+		const m = service.modules ?? {};
+		const hasEditions = 'editions' in m;
+
+		const editionId = form.get('editionId')?.toString() ?? url.searchParams.get('edition') ?? undefined;
+
+		if (hasEditions && !editionId) return fail(400, { error: 'editionId required for edition services' });
+
+		const baseInput = {
 			date,
 			time: form.get('time')?.toString() || undefined,
 			durationMinutes: form.get('durationMinutes') ? parseInt(form.get('durationMinutes')!.toString()) : undefined,
 			instructorIds: form.getAll('instructorId').map(String).filter(Boolean),
 			notes: form.get('notes')?.toString() || undefined
-		});
+		};
+
+		if (hasEditions && editionId) {
+			await createSession({ ownerType: 'edition', editionId, ...baseInput });
+		} else {
+			await createSession({ ownerType: 'service', serviceId: params.id, ...baseInput });
+		}
 		return { error: null, message: 'Sesión añadida' };
 	},
 

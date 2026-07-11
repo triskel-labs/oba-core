@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import type { PageData, ActionData } from './$types';
 	import * as m from '$lib/paraglide/messages';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	const ALL_ROLES = ['admin', 'owner', 'manager', 'instructor'] as const;
@@ -28,7 +30,7 @@
 
 <div class="mx-auto max-w-lg p-4 md:p-6">
 	<div class="mb-6 flex items-center gap-3">
-		<a href="/staff" class="text-sm text-muted hover:text-navy">← Staff</a>
+		<a href={resolve('/staff')} class="text-sm text-muted hover:text-navy">← Staff</a>
 		<h1 class="text-xl font-bold text-navy">{data.member.name}</h1>
 	</div>
 
@@ -43,64 +45,95 @@
 		{#if data.member.banned}
 			<p class="mt-1 text-xs font-medium text-red-600">{m.staff_detail_account_banned()}</p>
 		{/if}
+		{#if !data.canManageMember}
+			<p class="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+				Vista de perfil. La gestión de cuenta, permisos y contraseña queda reservada a administración.
+			</p>
+		{/if}
 	</section>
 
 	<!-- Roles -->
 	<section class="mb-4 rounded-(--radius-card) bg-surface p-5 ring-1 ring-border">
 		<h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{m.staff_detail_roles()}</h2>
-		<p class="mb-3 text-xs text-muted">{m.staff_detail_roles_hint()}</p>
-		<form method="POST" action="?/updateRole" use:enhance class="space-y-2">
-			{#each visibleRoles as r}
-				<label class="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 ring-1 ring-border hover:bg-sand">
-					<input
-						type="checkbox"
-						name="roles"
-						value={r}
-						checked={currentRoles.includes(r)}
-						class="h-4 w-4 rounded border-gray-300 text-ocean"
-					/>
-					<span class="flex-1">
-						<span class="text-sm font-medium text-gray-800">{ROLE_LABELS[r]}</span>
-						<span class="ml-2 text-xs text-muted">{ROLE_DESC[r]}</span>
-					</span>
-				</label>
-			{/each}
-			<div class="pt-2">
-				<button type="submit" class="btn-primary btn-sm">{m.staff_detail_save_roles()}</button>
+		{#if data.canManageMember}
+			<p class="mb-3 text-xs text-muted">{m.staff_detail_roles_hint()}</p>
+			<form method="POST" action="?/updateRole" use:enhance class="space-y-2">
+				{#each visibleRoles as r (r)}
+					<label class="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 ring-1 ring-border hover:bg-sand">
+						<input
+							type="checkbox"
+							name="roles"
+							value={r}
+							checked={currentRoles.includes(r)}
+							class="h-4 w-4 rounded border-gray-300 text-ocean"
+						/>
+						<span class="flex-1">
+							<span class="text-sm font-medium text-gray-800">{ROLE_LABELS[r]}</span>
+							<span class="ml-2 text-xs text-muted">{ROLE_DESC[r]}</span>
+						</span>
+					</label>
+				{/each}
+				<div class="pt-2">
+					<button type="submit" class="btn-primary btn-sm">{m.staff_detail_save_roles()}</button>
+				</div>
+			</form>
+		{:else}
+			<div class="flex flex-wrap gap-1.5">
+				{#each currentRoles as r (r)}
+					<StatusBadge variant={r} />
+				{/each}
 			</div>
-		</form>
+		{/if}
 	</section>
 
 	<!-- Profile (phone/bio/active) -->
 	<section class="mb-4 rounded-(--radius-card) bg-surface p-5 ring-1 ring-border">
 		<h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{m.staff_detail_profile()}</h2>
-		<form method="POST" action="?/updateProfile" use:enhance={() => async ({ update }) => update({ reset: false })} class="space-y-4">
-			<div>
-				<label for="phone" class="mb-1 block text-sm font-medium text-gray-700">{m.common_phone()}</label>
-				<input id="phone" name="phone" type="tel" value={data.member.phone ?? ''} class="input w-full" placeholder="+34 600 000 000" />
-			</div>
-			<div>
-				<label for="bio" class="mb-1 block text-sm font-medium text-gray-700">{m.staff_detail_bio()}</label>
-				<textarea id="bio" name="bio" rows="3" class="input w-full resize-none">{data.member.bio ?? ''}</textarea>
-			</div>
-			<div class="flex items-center gap-3">
-				<label class="flex cursor-pointer items-center gap-2">
-					<input type="hidden" name="active" value="false" />
-					<input
-						type="checkbox"
-						name="active"
-						value="true"
-						checked={data.member.active ?? true}
-						class="h-4 w-4 rounded border-gray-300 text-ocean"
-					/>
-					<span class="text-sm font-medium text-gray-700">{m.staff_detail_active()}</span>
-				</label>
-			</div>
-			<button type="submit" class="btn-primary btn-sm">{m.staff_detail_save_profile()}</button>
-		</form>
+		{#if data.canManageMember}
+			<form method="POST" action="?/updateProfile" use:enhance={() => async ({ update }) => update({ reset: false })} class="space-y-4">
+				<div>
+					<label for="phone" class="mb-1 block text-sm font-medium text-gray-700">{m.common_phone()}</label>
+					<input id="phone" name="phone" type="tel" value={data.member.phone ?? ''} class="input w-full" placeholder="+34 600 000 000" />
+				</div>
+				<div>
+					<label for="bio" class="mb-1 block text-sm font-medium text-gray-700">{m.staff_detail_bio()}</label>
+					<textarea id="bio" name="bio" rows="3" class="input w-full resize-none">{data.member.bio ?? ''}</textarea>
+				</div>
+				<div class="flex items-center gap-3">
+					<label class="flex cursor-pointer items-center gap-2">
+						<input type="hidden" name="active" value="false" />
+						<input
+							type="checkbox"
+							name="active"
+							value="true"
+							checked={data.member.active ?? true}
+							class="h-4 w-4 rounded border-gray-300 text-ocean"
+						/>
+						<span class="text-sm font-medium text-gray-700">{m.staff_detail_active()}</span>
+					</label>
+				</div>
+				<button type="submit" class="btn-primary btn-sm">{m.staff_detail_save_profile()}</button>
+			</form>
+		{:else}
+			<dl class="space-y-3 text-sm">
+				<div>
+					<dt class="text-xs text-muted">{m.common_phone()}</dt>
+					<dd class="mt-0.5 text-gray-800">{data.member.phone ?? '—'}</dd>
+				</div>
+				<div>
+					<dt class="text-xs text-muted">{m.staff_detail_bio()}</dt>
+					<dd class="mt-0.5 whitespace-pre-wrap text-gray-800">{data.member.bio ?? '—'}</dd>
+				</div>
+				<div class="flex items-center justify-between">
+					<dt class="text-xs text-muted">{m.staff_detail_active()}</dt>
+					<dd><StatusBadge variant={data.member.active ?? true ? 'active' : 'banned'} label={data.member.active ?? true ? 'activo' : 'inactivo'} /></dd>
+				</div>
+			</dl>
+		{/if}
 	</section>
 
 	<!-- Access -->
+	{#if data.canManageMember}
 	<section class="mb-4 rounded-(--radius-card) bg-surface p-5 ring-1 ring-border">
 		<h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{m.staff_detail_access()}</h2>
 		<div class="space-y-3">
@@ -115,8 +148,10 @@
 			</form>
 		</div>
 	</section>
+	{/if}
 
 	<!-- Password reset -->
+	{#if data.canManageMember}
 	<section class="mb-4 rounded-(--radius-card) bg-surface p-5 ring-1 ring-border">
 		<h2 class="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">Contraseña</h2>
 		<p class="mb-3 text-xs text-muted">Genera una nueva contraseña temporal para este usuario.</p>
@@ -137,6 +172,7 @@
 			</button>
 		</form>
 	</section>
+	{/if}
 
 	<!-- Danger zone (admin only) -->
 	{#if data.isAdmin}
@@ -147,11 +183,14 @@
 			<p class="mb-3 text-sm text-red-600">{form.error}</p>
 		{/if}
 		<form method="POST" action="?/deleteUser" use:enhance={() => async ({ result, update }) => {
-			if (result.type === 'success' && (result.data as any)?.deleted) {
-				window.location.href = '/staff';
-			} else {
-				await update();
+			if (result.type === 'success') {
+				const deleteData = result.data as { deleted?: boolean } | undefined;
+				if (deleteData?.deleted) {
+					window.location.href = resolve('/staff');
+					return;
+				}
 			}
+			await update();
 		}}>
 			<button type="submit" class="btn-destructive btn-sm"
 				onclick={(e) => { if (!confirm('¿Eliminar este usuario permanentemente? Esta acción no se puede deshacer.')) e.preventDefault(); }}>

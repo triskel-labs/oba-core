@@ -1,9 +1,20 @@
 import { error, fail } from '@sveltejs/kit';
+import { eq, and, inArray } from 'drizzle-orm';
+import { db } from '$lib/server/db';
+import { bookingClients } from '$lib/server/db/schema';
 import { getService } from '$lib/features/services/queries';
 import { listEditionsForService } from '$lib/features/services/editions.queries';
 import { listBookingsForRun, recalcEditionBookingAmounts } from '$lib/features/bookings/queries';
+import {
+	listParticipantsForEnrollment,
+	addParticipant,
+	renameParticipant,
+	removeParticipantWithCascade,
+	syncParticipantCount
+} from '$lib/features/bookings/participants.queries';
 import { requireRole } from '$lib/server/permissions';
 import {
+	updateSession,
 	listSessionsForEdition,
 	createSession,
 	cancelSession,
@@ -29,6 +40,24 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 		})
 	);
 
+	// Gather all booking IDs across all editions
+	const allBookingIds = Object.values(bookingsByEdition).flat().map(b => b.id);
+
+	// Load enrolled client IDs and participants per booking
+	const enrolledClientByBooking: Record<string, string> = {}; // bookingId → bookingClients.id
+	const participantsByEnrollment: Record<string, Awaited<ReturnType<typeof listParticipantsForEnrollment>>> = {};
+
+	if (allBookingIds.length > 0) {
+		const clientRows = await db
+			.select({ id: bookingClients.id, bookingId: bookingClients.bookingId })
+			.from(bookingClients)
+			.where(and(inArray(bookingClients.bookingId, allBookingIds), eq(bookingClients.status, 'enrolled')));
+		await Promise.all(clientRows.map(async row => {
+			enrolledClientByBooking[row.bookingId] = row.id;
+			participantsByEnrollment[row.id] = await listParticipantsForEnrollment(row.id);
+		}));
+	}
+
 	const [sessionsByEdition, instructors] = await Promise.all([
 		(async () => {
 			const map: Record<string, Awaited<ReturnType<typeof listSessionsForEdition>>> = {};
@@ -42,7 +71,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 		listInstructors()
 	]);
 
-	return { service, editions, focusEditionId, bookingsByEdition, sessionsByEdition, instructors };
+	return { service, editions, focusEditionId, bookingsByEdition, sessionsByEdition, instructors, enrolledClientByBooking, participantsByEnrollment };
 };
 
 export const actions: Actions = {
@@ -60,6 +89,20 @@ export const actions: Actions = {
 		});
 		await recalcEditionBookingAmounts(editionId);
 		return { error: null, message: 'Sesión añadida' };
+	},
+
+	updateEditionSession: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const sessionId = form.get('sessionId')?.toString() ?? '';
+		if (!sessionId) return fail(400, { error: 'sessionId required' });
+		await updateSession(sessionId, {
+			time: form.get('time')?.toString() || null,
+			durationMinutes: form.get('durationMinutes') ? parseInt(form.get('durationMinutes')!.toString()) : null,
+			notes: form.get('notes')?.toString() || null,
+			instructorIds: form.getAll('instructorId').map(String).filter(Boolean)
+		});
+		return { error: null, message: 'Sesión actualizada' };
 	},
 
 	cancelEditionSession: async ({ request, locals }) => {
@@ -82,6 +125,38 @@ export const actions: Actions = {
 		await deleteSession(sessionId);
 		if (editionId) await recalcEditionBookingAmounts(editionId);
 		return { error: null, message: 'Sesión eliminada' };
+	},
+
+	addRosterParticipant: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const bookingClientId = form.get('bookingClientId')?.toString() ?? '';
+		const name = form.get('name')?.toString().trim() ?? '';
+		if (!bookingClientId || !name) return fail(400, { error: 'bookingClientId and name required' });
+		await addParticipant(bookingClientId, name);
+		await syncParticipantCount(bookingClientId);
+		return { error: null, message: 'Participante añadido' };
+	},
+
+	renameRosterParticipant: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const participantId = form.get('participantId')?.toString() ?? '';
+		const name = form.get('name')?.toString().trim() ?? '';
+		if (!participantId || !name) return fail(400, { error: 'participantId and name required' });
+		await renameParticipant(participantId, name);
+		return { error: null, message: 'Nombre actualizado' };
+	},
+
+	removeRosterParticipant: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const participantId = form.get('participantId')?.toString() ?? '';
+		const bookingClientId = form.get('bookingClientId')?.toString() ?? '';
+		if (!participantId) return fail(400, { error: 'participantId required' });
+		await removeParticipantWithCascade(participantId);
+		if (bookingClientId) await syncParticipantCount(bookingClientId);
+		return { error: null, message: 'Participante eliminado' };
 	},
 
 	bulkGenerateEditionSessions: async ({ request, locals }) => {

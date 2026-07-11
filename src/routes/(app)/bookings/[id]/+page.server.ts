@@ -31,7 +31,11 @@ import {
 	renameParticipant,
 	setEnrollmentParticipantCount,
 	listParticipantsForEnrollment,
-	syncParticipantCount
+	syncParticipantCount,
+	bulkAddParticipants,
+	getParticipantRemovalImpact,
+	removeParticipantWithCascade,
+	updateParticipantPayment
 } from '$lib/features/bookings/participants.queries';
 import {
 	recalcBookingAmounts,
@@ -64,9 +68,11 @@ import {
 	updateAllocation,
 	deleteAllocation,
 	createAllocation,
-	createAllocations
+	createAllocations,
+	assignParticipantToAllocation
 } from '$lib/features/inventory/allocations.queries';
 import type { AllocationStatus } from '$lib/features/inventory/types';
+import type { PaymentStatus } from '$lib/features/bookings/types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	requireRole(locals, 'admin', 'owner', 'manager');
@@ -298,6 +304,29 @@ export const actions: Actions = {
 		}
 		await reenrollBookingClient(bookingClientId);
 		return { error: null, message: 'Client re-enrolled' };
+	},
+
+	addServiceSession: async ({ request, params, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const date = form.get('sessionDate')?.toString() ?? '';
+		const time = form.get('sessionTime')?.toString() || undefined;
+		const durRaw = form.get('sessionDuration')?.toString();
+		const durationMinutes = durRaw ? parseInt(durRaw) : undefined;
+		const instructorIds = form.getAll('sessionInstructorId').map(String).filter(Boolean);
+		if (!date) return fail(400, { error: 'Session date required' });
+		const booking = await getBooking(params.id);
+		if (!booking?.serviceId) return fail(400, { error: 'No service linked to booking' });
+		const session = await createSession({
+			ownerType: 'service',
+			serviceId: booking.serviceId,
+			date,
+			time,
+			durationMinutes,
+			instructorIds
+		});
+		await assignBookingToSession(params.id, session.id);
+		return { error: null, message: 'Sesión creada y asignada' };
 	},
 
 	addSession: async ({ request, params, locals }) => {
@@ -550,6 +579,7 @@ export const actions: Actions = {
 		if (!itemTypeId) return fail(400, { error: 'Item type required' });
 		const qty = parseInt(form.get('quantity')?.toString() ?? '1');
 		if (qty < 1) return fail(400, { error: 'Quantity must be at least 1' });
+		const bookingParticipantId = form.get('bookingParticipantId')?.toString() || null;
 
 		const type = await getInventoryItemType(itemTypeId);
 		if (!type) return fail(400, { error: 'Item type not found' });
@@ -583,6 +613,7 @@ export const actions: Actions = {
 			await createAllocations(
 				itemIds.map((itemId) => ({
 					bookingId: params.id,
+					bookingParticipantId,
 					itemTypeId,
 					itemId,
 					quantity: 1,
@@ -594,6 +625,7 @@ export const actions: Actions = {
 		} else {
 			await createAllocation({
 				bookingId: params.id,
+				bookingParticipantId,
 				itemTypeId,
 				itemId: null,
 				quantity: qty,
@@ -772,5 +804,81 @@ export const actions: Actions = {
 			}
 		}
 		return { message: 'Cantidad actualizada' };
+	},
+
+	bulkAddParticipants: async ({ request, params, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const bookingClientId = form.get('bookingClientId')?.toString() ?? '';
+		const rawNames = form.get('names')?.toString() ?? '';
+		const syncToSessions = form.get('syncToSessions') === 'true';
+		if (!bookingClientId) return fail(400, { error: 'bookingClientId required' });
+		const names = rawNames.split('\n').map(n => n.trim()).filter(Boolean);
+		if (names.length === 0) return fail(400, { error: 'No names provided' });
+
+		const newParticipants = await bulkAddParticipants(bookingClientId, names);
+		if (syncToSessions && newParticipants.length > 0) {
+			const booking = await getBooking(params.id);
+			if (booking) {
+				const sessions = await listSessionsForContext(booking);
+				await Promise.all(
+					sessions.map(s =>
+						Promise.all(
+							newParticipants.map(p =>
+								addParticipant({ sessionId: s.id, name: p.name, bookingParticipantId: p.id })
+							)
+						)
+					)
+				);
+			}
+		}
+		if (newParticipants.length > 0) await syncParticipantCount(bookingClientId);
+		await recalcBookingAmounts(params.id);
+		return { error: null, message: `${newParticipants.length} participante(s) añadidos` };
+	},
+
+	getRemovalImpact: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const participantId = form.get('participantId')?.toString() ?? '';
+		if (!participantId) return fail(400, { error: 'participantId required' });
+		const impact = await getParticipantRemovalImpact(participantId);
+		return { error: null, impact };
+	},
+
+	removeParticipantCascade: async ({ request, params, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const participantId = form.get('participantId')?.toString() ?? '';
+		const bookingClientId = form.get('bookingClientId')?.toString() ?? '';
+		if (!participantId) return fail(400, { error: 'participantId required' });
+		await removeParticipantWithCascade(participantId);
+		if (bookingClientId) await syncParticipantCount(bookingClientId);
+		await recalcBookingAmounts(params.id);
+		return { error: null, message: 'Participante eliminado' };
+	},
+
+	updateParticipantPayment: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const participantId = form.get('participantId')?.toString() ?? '';
+		const amountPaidStr = form.get('amountPaid')?.toString() ?? '0';
+		const amountDue = parseFloat(form.get('amountDue')?.toString() ?? '0');
+		if (!participantId) return fail(400, { error: 'participantId required' });
+		const paid = parseFloat(amountPaidStr);
+		const paymentStatus: PaymentStatus =
+			paid >= amountDue ? 'paid' : paid > 0 ? 'partial' : 'pending';
+		await updateParticipantPayment(participantId, amountPaidStr, paymentStatus);
+		return { error: null, message: 'Pago actualizado' };
+	},
+
+	assignInventoryParticipant: async ({ request, locals }) => {
+		requireRole(locals, 'admin', 'owner', 'manager');
+		const form = await request.formData();
+		const allocationId = form.get('allocationId')?.toString() ?? '';
+		const bookingParticipantId = form.get('bookingParticipantId')?.toString() || null;
+		if (!allocationId) return fail(400, { error: 'allocationId required' });
+		await assignParticipantToAllocation(allocationId, bookingParticipantId);
+		return { error: null, message: 'Equipo asignado' };
 	}
 };

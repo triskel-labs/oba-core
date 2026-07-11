@@ -1,6 +1,0 @@
-{"type":"server-started","port":54051,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:54051","screen_dir":"/Users/moli/Desktop/Coding/Projects/oba-core/.superpowers/brainstorm/21048-1781360493/content","state_dir":"/Users/moli/Desktop/Coding/Projects/oba-core/.superpowers/brainstorm/21048-1781360493/state"}
-{"type":"screen-added","file":"/Users/moli/Desktop/Coding/Projects/oba-core/.superpowers/brainstorm/21048-1781360493/content/module-picker.html"}
-{"type":"screen-added","file":"/Users/moli/Desktop/Coding/Projects/oba-core/.superpowers/brainstorm/21048-1781360493/content/booking-form.html"}
-{"type":"screen-added","file":"/Users/moli/Desktop/Coding/Projects/oba-core/.superpowers/brainstorm/21048-1781360493/content/booking-detail.html"}
-{"type":"screen-added","file":"/Users/moli/Desktop/Coding/Projects/oba-core/.superpowers/brainstorm/21048-1781360493/content/booking-detail-v2.html"}
-{"type":"server-stopped","reason":"idle timeout"}

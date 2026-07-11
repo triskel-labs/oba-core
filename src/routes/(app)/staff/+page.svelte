@@ -1,54 +1,49 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import * as m from '$lib/paraglide/messages';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
+
 	let { data }: { data: PageData } = $props();
-
-	const ROLE_COLORS: Record<string, string> = {
-		admin:      'bg-red-100 text-red-700',
-		owner:      'bg-ocean/10 text-ocean',
-		manager:    'bg-purple-100 text-purple-700',
-		instructor: 'bg-green-100 text-green-700'
-	};
-
-	const ROLE_LABELS: Record<string, string> = {
-		admin: 'Admin', owner: 'Owner', manager: 'Manager', instructor: 'Instructor'
-	};
 </script>
 
-<div class="p-4 md:p-6">
-	<div class="mb-6 flex items-center justify-between">
-		<h1 class="text-xl font-bold text-navy">{m.staff_list_title()}</h1>
-		<a href="/staff/new" class="btn-primary btn-sm">{m.staff_list_invite()}</a>
-	</div>
+<div class="flex flex-1 flex-col overflow-hidden">
+	<PageHeader
+		title={m.staff_list_title()}
+		count="{data.staff.length} miembro{data.staff.length !== 1 ? 's' : ''}"
+		actionHref="/staff/new"
+		actionLabel={m.staff_list_invite()}
+	/>
 
-	<div class="space-y-2">
-		{#each data.staff as member}
-			<a
-				href="/staff/{member.id}"
-				class="flex items-center gap-4 rounded-(--radius-card) bg-surface p-4 ring-1 ring-border hover:ring-ocean/50"
-			>
-				<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ocean/10 text-lg font-bold text-ocean">
-					{member.name[0].toUpperCase()}
-				</div>
-				<div class="min-w-0 flex-1">
-					<div class="flex flex-wrap items-center gap-1.5">
-						<p class="font-medium text-gray-800">{member.name}</p>
-						{#each (member.roles?.length ? member.roles : member.role ? [member.role] : []) as r}
-							<span class="rounded-full px-2 py-0.5 text-xs font-medium {ROLE_COLORS[r] ?? 'bg-gray-100 text-gray-600'}">
-								{ROLE_LABELS[r] ?? r}
-							</span>
-						{/each}
-						{#if member.banned}
-							<span class="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-600">{m.common_banned()}</span>
-						{/if}
-					</div>
-					<p class="text-xs text-muted">{member.email}</p>
-				</div>
-			</a>
-		{/each}
+	<div class="flex-1 overflow-y-auto p-4 md:p-6">
+		{#if data.staff.length === 0}
+			<p class="py-20 text-center text-sm text-muted">{m.staff_list_empty()}</p>
+		{:else}
+			<div class="space-y-2">
+				{#each data.staff as member}
+					<a
+						href="/staff/{member.id}"
+						class="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 transition-all hover:border-ocean/30 hover:shadow-sm"
+					>
+						<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ocean/10 text-sm font-bold text-ocean">
+							{member.name[0].toUpperCase()}
+						</div>
+						<div class="min-w-0 flex-1">
+							<div class="flex flex-wrap items-center gap-1.5">
+								<p class="font-semibold text-gray-900">{member.name}</p>
+								{#each (member.roles?.length ? member.roles : member.role ? [member.role] : []) as r}
+									<StatusBadge variant={r} />
+								{/each}
+								{#if member.banned}
+									<StatusBadge variant="banned" />
+								{/if}
+							</div>
+							<p class="text-xs text-muted">{member.email}</p>
+						</div>
+						<span class="shrink-0 text-xs text-muted">→</span>
+					</a>
+				{/each}
+			</div>
+		{/if}
 	</div>
-
-	{#if data.staff.length === 0}
-		<p class="py-12 text-center text-sm text-muted">{m.staff_list_empty()}</p>
-	{/if}
 </div>

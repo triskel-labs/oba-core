@@ -69,6 +69,25 @@ export interface SessionSurface extends Session {
 	totalParticipants: number;
 	totalAmountDue: number;
 	totalAmountPaid: number;
+	clientGroups: ClientGroup[];
+}
+
+export interface ClientSessionSummary {
+	sessionId: string;
+	date: string;
+	status: string;
+	serviceName: string | null;
+}
+
+export interface ClientGroup {
+	clientName: string; // always "First Last", never "Last, First"
+	bookingId: string;
+	participants: { id: string; name: string }[];
+}
+
+export interface SessionWithGroups extends Session {
+	clientGroups: ClientGroup[];
+	participantNames: string[];
 }
 
 // Calendar day view — enriched with booking/service context

@@ -3,20 +3,29 @@
 	import * as m from '$lib/paraglide/messages';
 	import { enhance } from '$app/forms';
 	import { withToast } from '$lib/utils/enhance';
+	import { getServiceColor } from '$lib/features/services/colors';
+	import SessionCard from '$lib/components/sessions/SessionCard.svelte';
+	import CardShell from '$lib/components/ui/CardShell.svelte';
+	import EnrollmentGroup from '$lib/components/bookings/EnrollmentGroup.svelte';
+	import { Users } from 'lucide-svelte';
+
 	let { data }: { data: PageData } = $props();
 
 	let activeEditionId = $state(data.focusEditionId ?? data.editions[0]?.id ?? '');
 	const activeEdition = $derived(data.editions.find(e => e.id === activeEditionId));
 	const activeBookings = $derived(data.bookingsByEdition[activeEditionId] ?? []);
-	// Use overlap-based participantCount sum (same source as calendar chips)
 	const totalEnrolled = $derived(activeEdition?.enrolledCount ?? 0);
+	const color = $derived(getServiceColor(data.service.color ?? ''));
 </script>
 
-<div class="p-4 md:p-6">
-	<div class="mb-6 flex items-center gap-3">
-		<a href="/services/{data.service.id}" class="text-sm text-muted hover:text-navy">← {data.service.name}</a>
-		<h1 class="text-xl font-bold text-navy">{m.camp_roster_title()}</h1>
+<div class="flex flex-1 flex-col overflow-hidden">
+	<div class="shrink-0 border-b border-border bg-surface/80 backdrop-blur-sm px-4 py-3 sm:px-6 flex items-center gap-2">
+		<a href="/services/{data.service.id}" class="shrink-0 text-sm text-muted transition-colors hover:text-navy">←</a>
+		<h1 class="truncate text-lg font-bold text-navy">{data.service.name}</h1>
+		<span class="shrink-0 text-xs text-muted">· {m.camp_roster_title()}</span>
 	</div>
+
+	<div class="flex-1 overflow-y-auto p-4 md:p-6">
 
 	{#if data.editions.length === 0}
 		<div class="rounded-lg bg-sand p-6 text-center">
@@ -46,13 +55,12 @@
 
 		{#if activeEdition}
 			<!-- Edition summary -->
-			<div class="mb-4 rounded-(--radius-card) bg-surface p-4 ring-1 ring-border">
-				<div class="flex items-center justify-between">
+			<CardShell label="{activeEdition.startDate} → {activeEdition.endDate}" icon={Users} class="mb-4">
+				<div class="flex items-center justify-between gap-3">
 					<div>
-						<p class="font-semibold text-gray-800">{activeEdition.startDate} → {activeEdition.endDate}</p>
 						{#if activeEdition.maxCapacity}
 							{@const slotsLeft = activeEdition.maxCapacity - totalEnrolled}
-							<p class="text-xs {slotsLeft <= 0 ? 'text-red-600 font-medium' : slotsLeft <= 3 ? 'text-amber-600' : 'text-muted'}">
+							<p class="text-sm {slotsLeft <= 0 ? 'font-medium text-red-600' : slotsLeft <= 3 ? 'text-amber-600' : 'text-muted'}">
 								{totalEnrolled} / {activeEdition.maxCapacity} {m.camp_roster_spots_filled()}
 								{#if slotsLeft <= 0}
 									· Aforo completo
@@ -61,7 +69,7 @@
 								{/if}
 							</p>
 						{:else}
-							<p class="text-xs text-muted">{totalEnrolled} {m.camp_roster_enrolled()}</p>
+							<p class="text-sm text-muted">{totalEnrolled} {m.camp_roster_enrolled()}</p>
 						{/if}
 						{#if activeEdition.notes}
 							<p class="mt-0.5 text-xs text-muted">{activeEdition.notes}</p>
@@ -69,53 +77,32 @@
 					</div>
 					<a
 						href="/bookings/new?serviceId={data.service.id}&editionId={activeEditionId}"
-						class="btn-primary btn-sm"
+						class="btn-primary btn-sm shrink-0"
 					>
 						{m.camp_roster_book_client()}
 					</a>
 				</div>
-			</div>
+			</CardShell>
 
 			<!-- Roster -->
 			{#if activeBookings.length === 0}
 				<p class="py-8 text-center text-sm text-muted">{m.camp_roster_no_bookings()}</p>
 			{:else}
-				<div class="divide-y divide-border rounded-(--radius-card) ring-1 ring-border overflow-hidden">
-					<!-- Header — fixed columns must match data row exactly -->
-					<div class="grid grid-cols-[1fr_5rem_9rem_4.5rem] bg-sand px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-						<span>Cliente</span>
-						<span class="text-right">Participantes</span>
-						<span class="text-center">Estado</span>
-						<span></span>
-					</div>
+				<div class="space-y-2">
 					{#each activeBookings as booking}
-						{@const statusClass = booking.status === 'confirmed'
-							? 'bg-green-100 text-green-700'
-							: booking.status === 'cancelled'
-							? 'bg-red-100 text-red-700'
-							: 'bg-sand text-muted'}
-						<div class="grid grid-cols-[1fr_5rem_9rem_4.5rem] items-center bg-surface px-4 py-3 hover:bg-sand/50 transition-colors">
-							<div class="min-w-0">
-								<p class="font-medium text-gray-800 truncate">{booking.firstClientName ?? 'Desconocido'}</p>
-								{#if booking.clientCount > 1}
-									<p class="text-xs text-muted">+{booking.clientCount - 1} cliente{booking.clientCount > 2 ? 's' : ''} más</p>
-								{/if}
-							</div>
-							<span class="tabular-nums text-sm text-right font-medium text-navy pr-2">
-								{booking.participantCount ?? booking.clientCount}
-							</span>
-							<span class="flex justify-center">
-								<span class="rounded-full px-2 py-0.5 text-xs font-medium {statusClass}">
-									{booking.status === 'confirmed' ? 'Confirmado' : booking.status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
-								</span>
-							</span>
-							<a
-								href="/bookings/{booking.id}"
-								class="rounded-lg bg-ocean/10 px-2.5 py-1 text-xs font-semibold text-ocean hover:bg-ocean/20 transition-colors text-center"
-							>
-								Ver →
-							</a>
-						</div>
+						{@const bcId = data.enrolledClientByBooking[booking.id]}
+						{@const participants = bcId ? (data.participantsByEnrollment[bcId] ?? []) : []}
+						<EnrollmentGroup
+							clientName={booking.firstClientName ?? 'Desconocido'}
+							bookingId={booking.id}
+							bookingClientId={bcId ?? ''}
+							{participants}
+							canEdit={!!bcId}
+							bulkAdd={false}
+							renameAction="?/renameRosterParticipant"
+							removeAction="?/removeRosterParticipant"
+							addAction="?/addRosterParticipant"
+						/>
 					{/each}
 				</div>
 			{/if}
@@ -164,45 +151,36 @@
 				</div>
 
 				{#if editionSessions.length === 0}
-					<p class="text-center py-4 text-sm text-muted">Sin sesiones programadas</p>
+					<p class="py-4 text-center text-sm text-muted">Sin sesiones programadas.</p>
 				{:else}
-					<div class="divide-y divide-border rounded-lg ring-1 ring-border overflow-hidden">
-						{#each editionSessions as s}
-							<div class="px-4 py-2 flex items-center gap-3 {s.status === 'cancelled' ? 'opacity-50' : ''}">
-								<span class="text-xs w-24 shrink-0">{s.date}</span>
-								<span class="text-sm font-medium">{s.time?.slice(0, 5) ?? '—'}</span>
-								{#if s.durationMinutes}
-									<span class="text-xs text-muted">{s.durationMinutes} min</span>
-								{/if}
-								{#if s.instructors.length > 0}
-									<span class="text-xs text-muted">{s.instructors[0].instructorName}</span>
-								{/if}
-								<span class="text-xs capitalize text-muted ml-auto">{s.status}</span>
-								<a
-									href="/sessions/{s.id}?from={encodeURIComponent('/services/' + data.service.id + '/roster?run=' + activeEditionId)}"
-									class="rounded-lg bg-ocean/10 px-2.5 py-1 text-xs font-semibold text-ocean hover:bg-ocean/20 transition-colors"
-								>Ver →</a>
-								{#if s.status !== 'cancelled'}
-									<form method="POST" action="?/cancelEditionSession" use:enhance={withToast()}>
-										<input type="hidden" name="sessionId" value={s.id} />
-										<input type="hidden" name="editionId" value={activeEditionId} />
-										<button type="submit" class="text-xs text-amber-600 hover:underline">Cancelar</button>
-									</form>
-								{/if}
-								<form method="POST" action="?/deleteEditionSession" use:enhance={withToast()}>
-									<input type="hidden" name="sessionId" value={s.id} />
-									<input type="hidden" name="editionId" value={activeEditionId} />
-									<button
-										type="submit"
-										onclick={(e) => { if (!confirm('¿Eliminar sesión?')) e.preventDefault(); }}
-										class="text-xs text-red-600 hover:underline"
-									>Eliminar</button>
-								</form>
-							</div>
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+						{#each editionSessions as s (s.id)}
+							<SessionCard
+								session={s}
+								{color}
+								openHref="/sessions/{s.id}?from={encodeURIComponent('/services/' + data.service.id + '/roster?run=' + activeEditionId)}"
+								updateAction="?/updateEditionSession"
+								cancelAction="?/cancelEditionSession"
+								deleteAction="?/deleteEditionSession"
+								instructors={data.instructors}
+								hiddenFields={{ sessionId: s.id, editionId: activeEditionId }}
+								showDate={true}
+								clientGroups={s.clientGroups}
+								participantNames={s.participantNames}
+							>
+								{#snippet children()}
+									{#if s.participants.length > 0}
+										<p class="text-[10px] text-muted">{s.participants.length} participante{s.participants.length !== 1 ? 's' : ''}</p>
+									{:else}
+										<p class="text-[10px] text-gray-300">Sin participantes</p>
+									{/if}
+								{/snippet}
+							</SessionCard>
 						{/each}
 					</div>
 				{/if}
 			</div>
 		{/if}
 	{/if}
+	</div>
 </div>

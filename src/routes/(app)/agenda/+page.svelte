@@ -2,6 +2,9 @@
 	import type { PageData } from './$types';
 	import * as m from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
+	import { User, Waves } from 'lucide-svelte';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -14,37 +17,28 @@
 		return t ? t.slice(0, 5) : null;
 	}
 
-	// Color map for session status
-	const statusColors: Record<string, string> = {
-		scheduled: 'bg-green-100 text-green-700',
-		completed: 'bg-gray-100 text-gray-600',
-		cancelled: 'bg-red-100 text-red-600',
-		unscheduled: 'bg-amber-100 text-amber-700'
-	};
-
-	const statusLabels: Record<string, string> = {
-		scheduled: 'Programada',
-		completed: 'Completada',
-		cancelled: 'Cancelada',
-		unscheduled: 'Sin hora'
-	};
+	function sessionStatusVariant(status: string): 'active' | 'completed' | 'cancelled' | 'unscheduled' {
+		if (status === 'completed') return 'completed';
+		if (status === 'cancelled') return 'cancelled';
+		if (status === 'unscheduled') return 'unscheduled';
+		return 'active';
+	}
 </script>
 
-<div class="p-4 md:p-6">
+<div class="flex flex-1 flex-col overflow-hidden">
+	<PageHeader
+		title={dayLabel}
+		subtitle={m.agenda_title()}
+		actionHref="/bookings/new"
+		actionLabel={m.agenda_new_booking()}
+	/>
 
-	<!-- Header -->
-	<div class="mb-6 flex items-start justify-between gap-4">
-		<div>
-			<h1 class="text-xl font-bold capitalize text-navy">{dayLabel}</h1>
-			<p class="text-sm text-muted">{m.agenda_title()}</p>
-		</div>
-		<a href="/bookings/new" class="btn-primary btn-sm shrink-0">{m.agenda_new_booking()}</a>
-	</div>
+	<div class="flex-1 overflow-y-auto p-4 md:p-6">
 
 	<!-- Stat cards -->
 	<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
 		<!-- Scheduled today -->
-		<div class="rounded-(--radius-card) bg-surface p-4 ring-1 ring-border">
+		<div class="rounded-xl border border-gray-100 bg-white p-4">
 			<p class="text-2xl font-bold text-navy">{data.scheduledToday}</p>
 			<p class="mt-0.5 text-xs text-muted">Sesiones hoy</p>
 		</div>
@@ -57,7 +51,7 @@
 				<p class="mt-0.5 text-xs text-amber-600">Sin hora hoy</p>
 			</a>
 		{:else}
-			<div class="rounded-(--radius-card) bg-surface p-4 ring-1 ring-border">
+			<div class="rounded-xl border border-gray-100 bg-white p-4">
 				<p class="text-2xl font-bold text-navy">{data.unscheduledToday}</p>
 				<p class="mt-0.5 text-xs text-muted">Sin hora hoy</p>
 			</div>
@@ -71,14 +65,14 @@
 				<p class="mt-0.5 text-xs text-amber-600">Por programar</p>
 			</a>
 		{:else}
-			<div class="rounded-(--radius-card) bg-surface p-4 ring-1 ring-border">
+			<div class="rounded-xl border border-gray-100 bg-white p-4">
 				<p class="text-2xl font-bold text-green-600">✓</p>
 				<p class="mt-0.5 text-xs text-muted">Al día</p>
 			</div>
 		{/if}
 
 		<!-- Pending revenue -->
-		<div class="rounded-(--radius-card) bg-surface p-4 ring-1 ring-border">
+		<div class="rounded-xl border border-gray-100 bg-white p-4">
 			<p class="text-2xl font-bold text-navy">€{data.stats.pendingRevenue.toFixed(0)}</p>
 			<p class="mt-0.5 text-xs text-muted">Pendiente cobro</p>
 		</div>
@@ -94,13 +88,13 @@
 		</div>
 
 		{#if data.todaySessions.length === 0}
-			<p class="rounded-(--radius-card) bg-surface p-6 text-center text-sm text-muted ring-1 ring-border">
+			<p class="rounded-xl border border-gray-100 bg-white p-6 text-center text-sm text-muted">
 				No hay sesiones programadas para hoy.
 			</p>
 		{:else}
 			<div class="space-y-2">
 				{#each data.todaySessions as session}
-					<div class="rounded-(--radius-card) bg-surface p-4 ring-1 ring-border {session.status === 'cancelled' ? 'opacity-50' : ''}">
+					<div class="rounded-xl border border-gray-100 bg-white p-4 {session.status === 'cancelled' ? 'opacity-50' : ''}">
 						<div class="flex items-start gap-3">
 							<!-- Time column -->
 							<div class="w-14 shrink-0 text-center">
@@ -118,20 +112,20 @@
 							<div class="min-w-0 flex-1">
 								<div class="flex flex-wrap items-center gap-2">
 									<p class="font-medium text-gray-800">{session.serviceName ?? 'Sesión'}</p>
-									<span class="rounded-full px-2 py-0.5 text-xs font-medium {statusColors[session.status] ?? 'bg-gray-100 text-gray-600'}">
-										{statusLabels[session.status] ?? session.status}
-									</span>
+									<StatusBadge variant={sessionStatusVariant(session.status)} />
 								</div>
 
 								{#if session.instructors?.length}
-									<p class="mt-0.5 text-xs text-muted">
-										🌊 {session.instructors.map(i => i.instructorName).filter(Boolean).join(', ')}
+									<p class="mt-0.5 flex items-center gap-1 text-xs text-muted">
+										<User size={10} class="shrink-0" />
+										{session.instructors.map(i => i.instructorName).filter(Boolean).join(', ')}
 									</p>
 								{/if}
 
 								{#if session.participantNames?.length}
-									<p class="mt-0.5 text-xs text-muted">
-										🏄 {session.participantNames.join(', ')}
+									<p class="mt-0.5 flex items-center gap-1 text-xs text-muted">
+										<Waves size={10} class="shrink-0" />
+										{session.participantNames.join(', ')}
 									</p>
 								{/if}
 
@@ -159,7 +153,7 @@
 				{#each data.activeCamps as camp}
 					<a
 						href="/bookings/{camp.id}"
-						class="flex items-center justify-between rounded-(--radius-card) bg-surface p-4 ring-1 ring-border hover:ring-ocean/50"
+						class="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-4 transition-all hover:border-ocean/30 hover:shadow-sm"
 					>
 						<div class="min-w-0">
 							<p class="font-medium text-gray-800">{camp.serviceName ?? 'Camp'}</p>
@@ -189,7 +183,7 @@
 				{#each data.nextEvents as event}
 					<a
 						href="/events/{event.id}"
-						class="flex items-center justify-between rounded-(--radius-card) bg-surface p-4 ring-1 ring-border hover:ring-ocean/50"
+						class="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-4 transition-all hover:border-ocean/30 hover:shadow-sm"
 					>
 						<div>
 							<p class="font-medium text-gray-800">{event.title}</p>
@@ -222,5 +216,5 @@
 			</a>
 		</section>
 	{/if}
-
+	</div>
 </div>

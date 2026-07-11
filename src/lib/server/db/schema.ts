@@ -13,6 +13,7 @@ import {
 	uniqueIndex,
 	type AnyPgColumn
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { user } from './auth.schema';
 import type { ServiceModules } from '$lib/features/services/modules';
 
@@ -38,7 +39,7 @@ export const pricingModeEnum = pgEnum('pricing_mode', [
 	'per_half_day'
 ]);
 
-export const sessionStatusEnum = pgEnum('session_status', ['unscheduled', 'scheduled', 'cancelled']);
+export const sessionStatusEnum = pgEnum('session_status', ['unscheduled', 'scheduled', 'completed', 'cancelled']);
 export const sessionOwnerTypeEnum = pgEnum('session_owner_type', ['booking', 'service', 'edition']);
 export const bookingClientStatusEnum = pgEnum('booking_client_status', ['enrolled', 'cancelled']);
 export const trackingModeEnum = pgEnum('tracking_mode', ['pool', 'specific']);
@@ -174,7 +175,8 @@ export const bookingClients = pgTable('booking_clients', {
 	cancelledAt: timestamp('cancelled_at')
 }, (t) => [
 	index('idx_booking_clients_booking').on(t.bookingId),
-	index('idx_booking_clients_client').on(t.clientId)
+	index('idx_booking_clients_client').on(t.clientId),
+	uniqueIndex('uq_booking_clients_booking').on(t.bookingId).where(sql`${t.status} = 'enrolled'`)
 ]);
 
 export const bookingParticipants = pgTable('booking_participants', {
@@ -185,6 +187,8 @@ export const bookingParticipants = pgTable('booking_participants', {
 	name: text('name').notNull(),
 	notes: text('notes'),
 	sortOrder: integer('sort_order').notNull().default(0),
+	amountPaid: numeric('amount_paid', { precision: 10, scale: 2 }).notNull().default('0'),
+	paymentStatus: paymentStatusEnum('payment_status').notNull().default('pending'),
 	createdAt: timestamp('created_at').notNull().defaultNow()
 }, (t) => [
 	index('idx_booking_participants_booking_client').on(t.bookingClientId)
@@ -288,6 +292,7 @@ export const sessionParticipants = pgTable('session_participants', {
 		.references(() => bookingParticipants.id, { onDelete: 'set null' }),
 	name: text('name').notNull(),
 	notes: text('notes'),
+	paid: boolean('paid').notNull().default(false),
 	sortOrder: integer('sort_order').notNull().default(0),
 	createdAt: timestamp('created_at').notNull().defaultNow()
 }, (t) => [
@@ -379,6 +384,8 @@ export const inventoryAllocations = pgTable('inventory_allocations', {
 	bookingId: text('booking_id')
 		.notNull()
 		.references(() => bookings.id, { onDelete: 'cascade' }),
+	bookingParticipantId: text('booking_participant_id')
+		.references(() => bookingParticipants.id, { onDelete: 'set null' }),
 	itemTypeId: text('item_type_id')
 		.notNull()
 		.references(() => inventoryItemTypes.id, { onDelete: 'restrict' }),
@@ -393,6 +400,7 @@ export const inventoryAllocations = pgTable('inventory_allocations', {
 	updatedAt: timestamp('updated_at').notNull().defaultNow()
 }, (t) => [
 	index('idx_inventory_allocations_booking').on(t.bookingId),
+	index('idx_inventory_allocations_participant').on(t.bookingParticipantId),
 	index('idx_inventory_allocations_item_type').on(t.itemTypeId),
 	index('idx_inventory_allocations_item').on(t.itemId),
 	index('idx_inventory_allocations_dates').on(t.startDate, t.endDate)

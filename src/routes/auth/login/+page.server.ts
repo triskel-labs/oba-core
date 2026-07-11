@@ -1,6 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { APIError } from 'better-auth/api';
-import { auth } from '$lib/server/auth';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -21,6 +20,8 @@ export const actions: Actions = {
 		}
 
 		try {
+			const { auth } = await import('$lib/server/auth');
+
 			await auth.api.signInEmail({ body: { email, password } });
 		} catch (error) {
 			if (error instanceof APIError) {

@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { inventoryAllocations, inventoryItemTypes, inventoryItems } from '$lib/server/db/schema';
 import type {
@@ -17,6 +17,7 @@ export async function createAllocations(
 		.values(
 			inputs.map((i) => ({
 				bookingId: i.bookingId,
+				bookingParticipantId: i.bookingParticipantId ?? null,
 				itemTypeId: i.itemTypeId,
 				itemId: i.itemId ?? null,
 				quantity: i.quantity ?? 1,
@@ -36,6 +37,7 @@ export async function listAllocationsForBooking(
 		.select({
 			id: inventoryAllocations.id,
 			bookingId: inventoryAllocations.bookingId,
+			bookingParticipantId: inventoryAllocations.bookingParticipantId,
 			itemTypeId: inventoryAllocations.itemTypeId,
 			itemId: inventoryAllocations.itemId,
 			quantity: inventoryAllocations.quantity,
@@ -90,6 +92,7 @@ export async function createAllocation(input: CreateAllocationInput): Promise<In
 		.insert(inventoryAllocations)
 		.values({
 			bookingId: input.bookingId,
+			bookingParticipantId: input.bookingParticipantId ?? null,
 			itemTypeId: input.itemTypeId,
 			itemId: input.itemId ?? null,
 			quantity: input.quantity ?? 1,
@@ -99,4 +102,14 @@ export async function createAllocation(input: CreateAllocationInput): Promise<In
 		})
 		.returning();
 	return row as InventoryAllocation;
+}
+
+export async function assignParticipantToAllocation(
+	allocationId: string,
+	bookingParticipantId: string | null
+): Promise<void> {
+	await db
+		.update(inventoryAllocations)
+		.set({ bookingParticipantId, updatedAt: new Date() })
+		.where(eq(inventoryAllocations.id, allocationId));
 }

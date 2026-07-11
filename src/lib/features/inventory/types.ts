@@ -49,6 +49,7 @@ export interface ServiceInventoryLinkWithType extends ServiceInventoryLink {
 export interface InventoryAllocation {
 	id: string;
 	bookingId: string;
+	bookingParticipantId: string | null;
 	itemTypeId: string;
 	itemId: string | null;
 	quantity: number;
@@ -88,6 +89,7 @@ export interface CreateInventoryItemInput {
 
 export interface CreateAllocationInput {
 	bookingId: string;
+	bookingParticipantId?: string | null;
 	itemTypeId: string;
 	itemId?: string | null;
 	quantity?: number;

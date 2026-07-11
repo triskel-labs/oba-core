@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { deleteClient, getClient, updateClient } from '$lib/features/clients/queries';
 import { getBookingsForClient } from '$lib/features/bookings/queries';
+import { listSessionsForClient } from '$lib/features/sessions/queries';
 import type { SkillLevel } from '$lib/features/clients/types';
 import type { Actions, PageServerLoad } from './$types';
 import { requireRole } from '$lib/server/permissions';
@@ -9,8 +10,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	requireRole(locals, 'admin', 'owner', 'manager');
 	const client = await getClient(params.id);
 	if (!client) error(404, 'Client not found');
-	const bookings = await getBookingsForClient(params.id);
-	return { client, bookings };
+	const [bookings, sessions] = await Promise.all([
+		getBookingsForClient(params.id),
+		listSessionsForClient(params.id)
+	]);
+	return { client, bookings, sessions };
 };
 
 export const actions: Actions = {

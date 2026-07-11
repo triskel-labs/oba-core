@@ -18,6 +18,8 @@ import { getService } from '$lib/features/services/queries';
 import { getServiceEdition } from '$lib/features/services/editions.queries';
 import { getBooking } from '$lib/features/bookings/queries';
 import { listInstructors } from '$lib/features/instructors/queries';
+import { listAllocationsForBooking } from '$lib/features/inventory/allocations.queries';
+import { listLinksForService } from '$lib/features/inventory/serviceLinks.queries';
 import { requireRole } from '$lib/server/permissions';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -31,6 +33,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	let serviceName: string | null = null;
 	let serviceColor: string | null = null;
 	let editionId: string | null = null;
+	let serviceDurationMinutes: number | null = null;
 	let backLink = '/calendar';
 	let backLabel = 'Calendario';
 	let bookingClientName: string | null = null;
@@ -40,6 +43,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		serviceId = session.serviceId;
 		serviceName = svc?.name ?? null;
 		serviceColor = svc?.color ?? null;
+		serviceDurationMinutes = svc?.durationMinutes ?? null;
 		backLink = `/services/${serviceId}/sessions/`;
 		backLabel = serviceName ?? 'Sesiones';
 	} else if (session.ownerType === 'edition' && session.serviceEditionId) {
@@ -50,6 +54,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			editionId = edition.id;
 			serviceName = svc?.name ?? null;
 			serviceColor = svc?.color ?? null;
+			serviceDurationMinutes = svc?.durationMinutes ?? null;
 			backLink = `/services/${serviceId}/roster?run=${editionId}`;
 			backLabel = serviceName ?? 'Campamento';
 		}
@@ -60,6 +65,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 			serviceId = booking.serviceId ?? null;
 			serviceName = booking.serviceName ?? null;
 			serviceColor = booking.serviceColor ?? null;
+			serviceDurationMinutes = svc?.durationMinutes ?? null;
 			backLink = `/bookings/${session.bookingId}`;
 			const firstClient = booking.clients?.[0];
 			backLabel = [firstClient?.clientFirstName, firstClient?.clientLastName].filter(Boolean).join(' ') || 'Reserva';
@@ -90,8 +96,33 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const assignableBookingsSummary = assignableBookings
 		.filter(u => { if (seenBookings.has(u.bookingId)) return false; seenBookings.add(u.bookingId); return true; });
 
+	// For booking sessions: load allocations + service inventory links for inline display
+	let bookingAllocations: Awaited<ReturnType<typeof listAllocationsForBooking>> = [];
+	let serviceInventoryLinks: Awaited<ReturnType<typeof listLinksForService>> = [];
+	if (session.ownerType === 'booking' && session.bookingId) {
+		const [allocs, links] = await Promise.all([
+			listAllocationsForBooking(session.bookingId),
+			serviceId ? listLinksForService(serviceId) : Promise.resolve([])
+		]);
+		bookingAllocations = allocs;
+		serviceInventoryLinks = links;
+	}
+
+	// For group sessions: load allocations per enrolled booking
+	const enrollmentAllocations: Record<string, Awaited<ReturnType<typeof listAllocationsForBooking>>> = {};
+	if (session.ownerType !== 'booking') {
+		const activeEnrolls = enrollments.filter(e => e.status !== 'cancelled');
+		await Promise.all(
+			activeEnrolls.map(async e => {
+				enrollmentAllocations[e.bookingId] = await listAllocationsForBooking(e.bookingId);
+			})
+		);
+	}
+
+	const effectiveDuration = session.durationMinutes ?? serviceDurationMinutes ?? 60;
+
 	return {
-		session,
+		session: { ...session, effectiveDuration },
 		serviceId,
 		serviceName,
 		serviceColor,
@@ -102,7 +133,10 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		backLabel,
 		bookingClientName,
 		assignableBookings: assignableBookingsSummary,
-		participants
+		participants,
+		bookingAllocations,
+		serviceInventoryLinks,
+		enrollmentAllocations
 	};
 };
 

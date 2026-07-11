@@ -6,6 +6,7 @@
 	import type { ServiceColorKey } from '$lib/features/services/colors';
 	import { MODULE_DEFINITIONS } from '$lib/modules/index';
 	import ServiceForm from '$lib/components/services/ServiceForm.svelte';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import type { ActionData, PageData } from './$types';
 	import * as m from '$lib/paraglide/messages';
 
@@ -36,31 +37,25 @@
 	);
 </script>
 
-<div class="p-4 md:p-6">
-
-	<!-- Header -->
-	<div class="mb-6 flex items-start gap-3">
-		<a href="/services" class="btn-ghost btn-sm mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg p-0">←</a>
-		<div class="flex-1 min-w-0">
-			<!-- Module badges -->
-			<div class="mb-1 flex flex-wrap gap-1">
+<div class="flex flex-1 flex-col overflow-hidden">
+	<PageHeader
+		title={data.service.name}
+		backHref="/services"
+		subtitle={!data.service.active ? m.common_inactive() : undefined}
+	>
+		{#snippet children()}
+			<div class="flex flex-wrap gap-1">
 				{#each activeModDefs as mod}
 					<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{mod.icon} {mod.label}</span>
 				{/each}
 				{#if activeModDefs.length === 0}
-					<span class="text-[10px] text-muted">Sin módulos</span>
+					<span class="text-[10px] text-muted">Sin módulos activos</span>
 				{/if}
 			</div>
-			<div class="flex items-center gap-2">
-				<span class="inline-block h-3 w-3 shrink-0 rounded-full"
-					style="background-color: {DOT_COLORS[data.service.color as ServiceColorKey] ?? DOT_COLORS['ocean']}"></span>
-				<h1 class="text-xl font-bold text-navy truncate">{data.service.name}</h1>
-				{#if !data.service.active}
-					<span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-muted">{m.common_inactive()}</span>
-				{/if}
-			</div>
-		</div>
-	</div>
+		{/snippet}
+	</PageHeader>
+
+	<div class="flex-1 overflow-y-auto p-4 md:p-6">
 
 	<!-- Group class sessions link -->
 	{#if data.hasGroupSessions}
@@ -117,7 +112,7 @@
 		<!-- Non-editors: read-only summary -->
 		<div class="space-y-4">
 			<!-- Core info card -->
-			<div class="rounded-(--radius-card) bg-surface p-5 ring-1 ring-border space-y-3">
+			<div class="rounded-xl border border-gray-100 bg-white p-4 space-y-3">
 				<div class="flex items-center justify-between">
 					<span class="text-xs font-semibold uppercase tracking-wider text-muted">{m.service_detail_price()}</span>
 					<span class="text-sm font-semibold text-gray-800">
@@ -149,17 +144,21 @@
 
 			<!-- Editions (read-only) -->
 			{#if data.runs?.length > 0}
-				<div class="rounded-(--radius-card) bg-surface p-5 ring-1 ring-border">
+				<div class="rounded-xl border border-gray-100 bg-white p-4">
 					<p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{m.service_detail_runs()}</p>
 					<div class="space-y-2">
 						{#each data.runs as run}
-							<div class="flex items-center justify-between rounded-lg px-3 py-2 ring-1 ring-border">
+							<div class="flex items-center justify-between rounded-lg px-3 py-2 ring-1 ring-border hover:bg-gray-50">
 								<div>
 									<p class="text-sm font-medium text-gray-800">{run.startDate} → {run.endDate}</p>
 									{#if run.maxCapacity}
-										<p class="text-xs text-muted">{run.enrolledCount} / {run.maxCapacity} enrolled</p>
+										<p class="text-xs text-muted">{run.enrolledCount} / {run.maxCapacity} inscripciones</p>
 									{/if}
 								</div>
+								<a href="/services/{data.service.id}/sessions?edition={run.id}"
+									class="ml-3 shrink-0 text-xs font-medium text-ocean hover:underline">
+									Sesiones →
+								</a>
 							</div>
 						{/each}
 					</div>
@@ -168,7 +167,7 @@
 
 			<!-- Inventory links (read-only) -->
 			{#if data.inventoryLinks?.length > 0}
-				<div class="rounded-(--radius-card) bg-surface p-5 ring-1 ring-border">
+				<div class="rounded-xl border border-gray-100 bg-white p-4">
 					<p class="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{m.service_detail_linked_inventory()}</p>
 					<div class="space-y-1.5">
 						{#each data.inventoryLinks as link}
@@ -184,4 +183,5 @@
 			{/if}
 		</div>
 	{/if}
+	</div>
 </div>

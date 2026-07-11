@@ -3,6 +3,7 @@ import {
 	skillLevelEnum,
 	bookingStatusEnum,
 	paymentStatusEnum,
+	sessionStatusEnum,
 	services,
 	bookingClients,
 	bookingParticipants,
@@ -19,6 +20,9 @@ describe('schema enums', () => {
 	})
 	it('paymentStatus has correct values', () => {
 		expect(paymentStatusEnum.enumValues).toEqual(['pending', 'partial', 'paid'])
+	})
+	it('sessionStatus supports completed sessions for attendance badges', () => {
+		expect(sessionStatusEnum.enumValues).toEqual(['unscheduled', 'scheduled', 'completed', 'cancelled'])
 	})
 })
 
