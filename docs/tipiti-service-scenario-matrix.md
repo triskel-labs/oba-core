@@ -15,7 +15,8 @@ This is the correct next layer below `docs/product-control-strategy.md`.
 
 - Product control says **which product grammar we use**.
 - This scenario matrix says **how Tipiti actually behaves**.
-- Coding tasks should use both.
+- `docs/tipiti-operating-spec.md` expands this into detailed service-by-service rules before UI/code work.
+- Coding tasks should use all three.
 
 ---
 

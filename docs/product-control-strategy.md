@@ -14,6 +14,7 @@ This is not frozen forever. It is the current source of product truth until Dave
 Related operating-detail document:
 
 - `docs/tipiti-service-scenario-matrix.md` — translates Tipiti's real services, processes, and edge cases from the second brain into OBA workflow logic.
+- `docs/tipiti-operating-spec.md` — detailed service-by-service operating rules before more UI/code work.
 
 ## 0. Why this document exists
 
