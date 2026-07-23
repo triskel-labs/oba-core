@@ -78,6 +78,36 @@
 		</div>
 	</div>
 
+	<!-- Attention cards -->
+	{#if data.attentionCards.length > 0}
+		<section class="mb-6">
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="text-xs font-semibold uppercase tracking-wider text-muted">Necesita atención</h2>
+				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{data.attentionCards.length}</span>
+			</div>
+			<div class="space-y-2">
+				{#each data.attentionCards as card (card.id)}
+					<div class="rounded-(--radius-card) border border-amber-200 bg-amber-50 p-4">
+						<div class="flex items-start justify-between gap-3">
+							<a href={card.href} class="min-w-0 flex-1">
+								<p class="text-sm font-semibold text-amber-900">{card.title}</p>
+								<p class="mt-0.5 text-xs text-amber-700">{card.description}</p>
+							</a>
+							<div class="flex shrink-0 gap-2">
+								{#each card.actions as action}
+									<a href={action.href}
+										class={action.variant === 'primary' ? 'rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700' : 'rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200 hover:ring-amber-400'}>
+										{action.label}
+									</a>
+								{/each}
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</section>
+	{/if}
+
 	<!-- Today's sessions -->
 	<section class="mb-6">
 		<div class="mb-3 flex items-center justify-between">
