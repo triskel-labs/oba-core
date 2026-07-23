@@ -31,7 +31,7 @@
 	const hasCredits = $derived('credits' in modules);
 	const hasDateRange = $derived(!!('editions' in modules && data.booking.dateEnd));
 
-	const canSeeFinancials = $derived(data.canSeeFinancials);
+	const canRecordPayment = $derived(data.canRecordPayment);
 	const isPricedPerPersonPerSession = $derived(data.service?.pricingMode === 'per_person_per_session');
 
 	// Single booking client (1-per-booking model)
@@ -338,13 +338,12 @@
 		<div class="rounded-(--radius-card) border border-gray-200 bg-white p-4">
 			<div class="mb-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">💳 Pago</div>
 
-			{#if canSeeFinancials && bookingClient}
+			{#if canRecordPayment && bookingClient}
 				{#if isPricedPerPersonPerSession && participants.length > 0}
 					<!-- Per-participant breakdown -->
 					<div class="mb-1 text-[9px] text-muted">por sesión × participante</div>
 					<div class="mb-3 flex flex-col gap-1.5">
 						{#each participants as p (p.id)}
-							{@const amountDue = parseFloat(bookingClient.amountDue) / Math.max(participants.length, 1)}
 							{@const participantPaymentBadge = paymentBadge(p.paymentStatus)}
 							<div class="overflow-hidden rounded-lg border border-gray-100">
 								<div class="flex items-center justify-between px-3 py-2">
@@ -361,7 +360,6 @@
 										use:enhance={withToast(() => { expandedPaymentId = null; })}
 										class="space-y-2 border-t border-gray-100 bg-gray-50 px-3 py-2">
 										<input type="hidden" name="participantId" value={p.id} />
-										<input type="hidden" name="amountDue" value={amountDue.toFixed(2)} />
 										<div class="flex items-center gap-2">
 											<label class="w-16 shrink-0 text-[9px] text-muted">Pagado €</label>
 											<input name="amountPaid" type="number" step="0.01" min="0"
@@ -387,7 +385,6 @@
 						</div>
 						<form method="post" action="?/updatePayment" use:enhance={withToast()} class="flex items-center gap-2 px-1">
 							<input type="hidden" name="bookingClientId" value={bookingClient.id} />
-							<input type="hidden" name="amountDue" value={bookingClient.amountDue} />
 							<span class="text-[10px] text-muted">Pagado €</span>
 							<input name="amountPaid" type="number" step="0.01" min="0"
 								value={bookingClient.amountPaid}
@@ -417,8 +414,8 @@
 						<button type="submit" class="text-[9px] text-muted hover:text-gray-700 hover:underline">Recalcular precio</button>
 					</form>
 				{/if}
-			{:else if !canSeeFinancials}
-				<p class="text-xs italic text-muted">Sin acceso a datos financieros.</p>
+			{:else if !canRecordPayment}
+				<p class="text-xs italic text-muted">Sin permiso para registrar pagos.</p>
 			{/if}
 		</div>
 	</div>
