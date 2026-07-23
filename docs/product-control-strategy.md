@@ -59,8 +59,11 @@ This means workflow archetypes are still valid as internal grammar, but the near
 
 1. **Business-owned database** — Cris/Patri can see and edit their data directly.
 2. **Manager cockpit** — daily operational actions without exposing all admin complexity.
-3. **Message layer** — Telegram/WhatsApp-style notifications and drafts generated from records, then logged back to records.
-4. **Reuse boring systems** — inspect existing open-source/calendar/notification/admin tools before building custom machinery.
+3. **Message layer** — Telegram/WhatsApp-style notifications/actions generated from records, then logged back to records; auto-send is allowed only with duplicate-safe state tracking.
+4. **Reuse boring systems** — inspect free/open-source/customizable calendar/notification/admin tools before building custom machinery; avoid vendor lock-in.
+5. **Top-notch game-like UX** — simplicity is not an excuse for crude interaction design.
+
+Dave's review decision: build the stripped-down Tipiti MVP as a separate cockpit spike/restart, then handle existing production OBA data later as migration/import.
 
 See `docs/tipiti-stripped-down-simplicity.md`.
 
@@ -292,15 +295,16 @@ If the last question has no strong answer, the feature is probably drift.
 The 2026-07-23 simplicity reset changes the order. Do not jump to more workflow-specific depth before the simple Tipiti operating loop is clear.
 
 1. Treat `docs/tipiti-stripped-down-simplicity.md` as the current MVP filter.
-2. Audit current screens against: visible records, full CRUD admin, Today cockpit, Requests queue, message actions.
-3. Decide whether the stripped-down cockpit is implemented inside current OBA Core or as a reversible Tipiti cockpit spike.
+2. Start a separate stripped-down Tipiti cockpit spike/restart; do not force it through the current scattered OBA surface.
+3. Treat existing production OBA data as a later migration/import problem.
 4. Define the minimal operational record model: client, booking/request, participant, agenda item, payment, staff, material need, message action, service template.
 5. Build or prototype **Today + Requests + Full CRUD admin** before deep calendars/credits/inventory.
 6. Keep workflow classifier/tests only where they support routing; do not expose the classifier as product center.
-7. Make communication actions explicit: draft/approve/send/log before auto-send.
-8. Evaluate reuse candidates for CRUD/admin/calendar/notifications before custom-building those layers.
-9. Revisit group-session capacity, participant sync, credits, inventory allocation, and accommodation rules after the stripped-down loop is useful.
-10. Only then expand product packs beyond OBA Surf/activity-school.
+7. Make communication actions explicit and duplicate-safe: draft/approve/queue/send/log/acted_on; allow auto-send only when idempotent and source data is clear.
+8. Evaluate only free/open-source/customizable reuse candidates for CRUD/admin/calendar/notifications before custom-building those layers; avoid vendor lock-in.
+9. Make surf class request, today's agenda, and payments all feel excellent; do not pick only one as the polished path.
+10. Revisit group-session capacity, participant sync, credits, inventory allocation, and accommodation rules after the stripped-down loop is useful.
+11. Only then expand product packs beyond OBA Surf/activity-school.
 
 ---
 
@@ -311,7 +315,8 @@ Any AI coding agent working on OBA Core must receive this instruction before imp
 ```txt
 Before coding, read docs/product-control-strategy.md and docs/tipiti-stripped-down-simplicity.md.
 Do not expose raw service modules as the primary user mental model.
-For Tipiti MVP work, bias toward visible records, full CRUD admin, Today/Requests cockpit, and explicit message actions before deeper calendars/credits/inventory automation.
+For Tipiti MVP work, build a separate stripped-down cockpit spike/restart: visible records, full CRUD admin, Today/Requests cockpit, top-notch game-like UX, and explicit duplicate-safe Telegram/WhatsApp message actions before deeper calendars/credits/inventory automation.
+Use only free/open-source/customizable external tools for core layers unless Dave explicitly approves otherwise; avoid vendor lock-in.
 Route product decisions through workflow archetypes only where they support the operator flow: private lesson, group class, camp/run/edition, rental/resource reservation, credit pack, simple booking.
 If a change modifies booking/enrollment/session/edition/credit/inventory/message semantics, stop and ask for product approval before implementing.
 ```

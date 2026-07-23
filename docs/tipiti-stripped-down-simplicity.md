@@ -17,6 +17,10 @@ Dave's correction:
 
 > Strip Tipiti down to the simplest indispensable system: a business-owned operational record, a very usable manager cockpit, and low-friction communications. Do not reinvent complex calendars, notification engines, or overdesigned service logic before we know what is actually needed.
 
+After review, Dave sharpened the rule:
+
+> Simplicity and not reinventing the wheel are mandatory, but the user interaction with the data must still be top-notch — closer to a game-like cockpit than a spreadsheet clone.
+
 This document is a product reset lens. It does not delete the existing workflow architecture; it ranks what matters first.
 
 ## 1. Core thesis
@@ -178,15 +182,31 @@ Principles:
 6. **Changes glow.** Recently changed items should be visibly marked.
 7. **Daily quests, not dashboards.** "These 6 things need attention" is better than metric soup.
 
-## 7. Communication implementation options to investigate before building
+## 7. Communication and reuse implementation options to investigate before building
 
 Before installing anything, evaluate what already exists.
+
+### 7.1 Reuse policy
+
+Dave's constraint:
+
+> Free/open-source/customizable is ideal. Avoid vendor lock-in. If a product is not usable directly, study the existing solution and copy/adapt the pattern into code we own.
+
+Evaluation rule:
+
+| Question | Required answer before adoption |
+|---|---|
+| Is it free/open-source or self-hostable? | Prefer yes; paid SaaS only as research/reference unless explicitly approved. |
+| Can we customize or fork it? | Must be yes for core workflow surfaces. |
+| Can we export/control our data? | Must be yes. No trapped operational data. |
+| Does it replace boring infrastructure? | Good: admin CRUD, tables, notifications, calendar widgets. |
+| Does it own the Tipiti UX? | Bad unless we can reshape it. The cockpit UX is ours. |
 
 | Need | Build ourselves? | Investigate/reuse |
 |---|---|---|
 | Scheduled daily digests | No, mostly already Hermes/cron-shaped | Hermes cronjobs, n8n, lightweight worker |
 | Internal owner/manager notifications | No custom app required first | Telegram bot, WhatsApp Cloud API, n8n |
-| Customer WhatsApp messages | Avoid custom protocol work if possible | WhatsApp Business Cloud API, Twilio, Evolution API, Baileys only if acceptable |
+| Customer WhatsApp messages | Avoid custom protocol work if possible | WhatsApp Business Cloud API, Twilio, Evolution API, Baileys only if acceptable/legal |
 | Calendar-like scheduling | Maybe not first | FullCalendar UI, Cal.com concepts, Google Calendar sync/export |
 | Admin CRUD | Do not hand-build everything if avoidable | SvelteKit tables/forms, NocoDB/Baserow/Appsmith/Directus as reference or temporary admin |
 | Workflow automation | No heavy engine first | n8n, Trigger.dev, temporal-ish only later |
@@ -194,6 +214,26 @@ Before installing anything, evaluate what already exists.
 Decision rule:
 
 > If an open-source tool can cover 80% of a boring operational layer without trapping us, reuse or copy the pattern. Build custom only where Tipiti's UX needs to feel native.
+
+### 7.2 Auto-send and message reliability
+
+Auto-send is allowed as a product direction, especially for customer-facing confirmations/reminders and instructor notifications.
+
+But any message that expects a follow-up action — especially in groups/channels — must be strict and idempotent.
+
+Reliability rules:
+
+1. Every outbound message is created from a `message_action` record.
+2. Every `message_action` has a stable idempotency key, so retrying cannot create duplicates.
+3. States must be explicit: `draft`, `approved`, `queued`, `sent`, `failed`, `skipped`, `acted_on`.
+4. Group/channel messages that include buttons or expected replies must target exactly one underlying action.
+5. If the system cannot prove whether a message was sent/actioned, it must surface a warning instead of sending another copy silently.
+6. Manual override always exists: owner can mark sent/skipped/failed and edit the source record.
+7. Customer-facing auto-send can come before internal approval only for low-risk templates with clear source data: confirmation, map, reminder, instructor assignment.
+
+Message mantra:
+
+> Auto-send is good when it removes friction. It is bad when it creates duplicates, ambiguous actions, or invisible state.
 
 ## 8. First MVP cut
 
@@ -209,13 +249,13 @@ Build only enough to replace air/WhatsApp memory with controlled records and dai
 - Pending schedule/follow-up queue.
 - Instructor/material fields as simple assignments/notes first.
 - Payment state: unpaid/paid/partial, method, amount.
-- Draft message actions for confirmations, reminders, missing info, map links.
+- Message actions for confirmations, reminders, missing info, map links.
+- Safe auto-send for low-risk customer/instructor notifications, backed by idempotency and visible logs.
 - Full admin data view.
 
 ### 8.2 Useful but second
 
 - Automatic WhatsApp ingestion.
-- Automatic outbound WhatsApp send.
 - Instructor confirmation buttons.
 - Inventory conflict detection.
 - Calendar sync.
@@ -238,29 +278,33 @@ This stripped-down lens changes priority:
 1. Stop expanding service logic until we define the simple operational record surface.
 2. Keep `classifyServiceWorkflow()` if it helps routing, but do not let it become the product center.
 3. Build/shape the **Today + Requests + Full CRUD admin** loop before deep calendars/credits/inventory.
-4. Use messages as a first-class operational output, but keep send/approve/log explicit.
-5. Evaluate reuse options before custom-building calendars/notification engines.
+4. Use messages as a first-class operational output: draft/approve where needed, auto-send where safe, always log and dedupe.
+5. Evaluate free/open-source/customizable reuse options before custom-building calendars/notification/admin layers.
 
 ## 10. Concrete next working session
 
 Recommended next session:
 
-1. Audit current OBA screens against this simplicity MVP.
-2. Decide whether to adapt current code or spike a stripped-down Tipiti cockpit route.
-3. Design one `Today` card model from existing data.
-4. Design one `Request/Booking` editable record model.
-5. Decide communication channel for first internal notifications: Telegram first is probably easiest; WhatsApp for clients remains more sensitive.
-6. Pick one reuse candidate to inspect for CRUD/admin/calendar instead of building blind.
+1. Start a **separate stripped-down Tipiti cockpit spike** instead of trying to fit this into the current scattered OBA surface.
+2. Treat existing production OBA data as a later migration/import problem, not as a constraint that blocks the clean product restart.
+3. Pick the stack/reuse candidates: free/open-source, customizable, no vendor lock-in, code/data we can own.
+4. Design the three records that must all feel excellent: surf class request, today's agenda, and payments.
+5. Design the first `Today` card model with game-like state/progression.
+6. Design the first `Request/Booking` editable record model with full owner override.
+7. Define the first safe auto-send cases and idempotency/logging rules.
+8. Then decide which current OBA concepts/code are worth copying back in.
 
-## 11. Open decisions for Dave
+## 11. Dave review decisions
 
-These are the questions that actually matter now:
+Dave answered the open questions on 2026-07-23:
 
-1. Should the stripped-down MVP be built inside current OBA Core, or as a separate Tipiti cockpit spike that can later merge back?
-2. For Cris/Patri, is full CRUD best as an OBA admin screen, or would a tool like Baserow/NocoDB/Directus be acceptable behind the scenes if the cockpit is custom?
-3. Is Telegram acceptable for internal owner/manager/instructor notifications, while WhatsApp remains client-facing?
-4. Should first automation only draft messages for approval, or is auto-send acceptable for low-risk reminders?
-5. What is the first record that must feel perfect: surf class request, today's agenda, or payments?
+| Question | Decision |
+|---|---|
+| Current OBA Core vs separate spike? | **Separate spike/restart.** Current OBA is scattered; production data exists but should be handled later as migration/import. |
+| Admin CRUD via OBA or external tool? | **Free/open-source/customizable only.** Avoid vendor lock-in. Direct use is good if adaptable; otherwise study/copy patterns into our own code. |
+| Telegram internally, WhatsApp client-facing? | **Yes.** |
+| Draft-only or auto-send? | **Auto-send can be good**, especially for customer-facing messages and instructor notifications, but any action-bearing group/channel message must be tight, reliable, and duplicate-safe. |
+| First record that must feel perfect? | **All of them:** surf class request, today's agenda, and payments. |
 
 ## 12. Working product mantra
 
