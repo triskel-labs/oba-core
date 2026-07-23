@@ -14,6 +14,7 @@ This is not frozen forever. It is the current source of product truth until Dave
 Related operating-detail documents:
 
 - `docs/tipiti-stripped-down-simplicity.md` — Dave's 2026-07-23 simplicity reset: business-owned records, manager cockpit, low-friction communications, reuse boring systems before custom complexity.
+- `docs/dolibarr-benchmark-for-oba.md` — benchmark notes from Dolibarr as mature ERP/CRM reference; useful for feature taxonomy, modules, permissions, import/export, and long-term ERP boundaries.
 - `docs/tipiti-service-scenario-matrix.md` — translates Tipiti's real services, processes, and edge cases from the second brain into OBA workflow logic.
 - `docs/tipiti-operating-spec.md` — detailed service-by-service operating rules before more UI/code work.
 
