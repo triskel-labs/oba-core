@@ -89,7 +89,15 @@ These are query-derived from OBA records and filtered by role/capability.
 | 9 | Roster/capacity mismatch | owner, manager | open roster / resolve |
 | 10 | Notification failed or needs approval | owner, manager | retry / manual send / skip |
 
-Important Tipiti rule: unpaid future surf classes are not urgent debt. Payment attention should usually start on service day / after service unless a service-specific deposit rule says otherwise.
+Important Tipiti rules from Dave's PR comments:
+
+- Shared group surf class clients should be told that other people may join the lesson/session.
+- Group class capacity is session-scoped and can intentionally expand when a second instructor is assigned; do not silently split/duplicate the session.
+- Unpaid future surf classes are not urgent debt, but unpaid classes after the scheduled time/date has passed become a severe Today warning/action.
+- Beer/free extras should not be part of MVP messaging unless the owner explicitly enables it.
+- Private class pricing must be reconfirmed; Dave's review suggests the old “60€ total group price” may be wrong and pricing may be per participant.
+- Credit packs/bonos are second-layer: show/use them only when a client already has an associated bought pack; otherwise treat them as optional upsell, not first intake complexity.
+- Auto-send is allowed for low-risk customer/instructor messages, but every action-bearing message needs idempotency, visible state, and duplicate protection.
 
 ## 5. Role/capability fixes
 

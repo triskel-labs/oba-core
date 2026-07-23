@@ -283,28 +283,26 @@ This stripped-down lens changes priority:
 
 ## 10. Concrete next working session
 
-Recommended next session:
+Recommended next session under the corrected model:
 
-1. Start a **separate stripped-down Tipiti cockpit spike** instead of trying to fit this into the current scattered OBA surface.
-2. Treat existing production OBA data as a later migration/import problem, not as a constraint that blocks the clean product restart.
-3. Pick the stack/reuse candidates: free/open-source, customizable, no vendor lock-in, code/data we can own.
-4. Design the three records that must all feel excellent: surf class request, today's agenda, and payments.
-5. Design the first `Today` card model with game-like state/progression.
-6. Design the first `Request/Booking` editable record model with full owner override.
-7. Define the first safe auto-send cases and idempotency/logging rules.
-8. Then decide which current OBA concepts/code are worth copying back in.
+1. Keep the separate `tipiti-cockpit` repo frozen as a UX/reference prototype only.
+2. Create a clean OBA branch for the rescue work, based from `main`, so product docs and code fixes are not mixed with stale docs PRs.
+3. Port only the ideas that still fit: Today cards, message actions, visible logs, idempotent notifications, game-like operational UX.
+4. Start with the smallest OBA vertical slice: manager can record payment safely, payment warnings appear in Today, and every action mutates/logs against the real OBA record.
+5. Then add first message-action records for client reminders and instructor assignments.
+6. Defer standalone restart/migration thinking unless OBA becomes impossible to simplify.
 
-## 11. Dave review decisions
+## 11. Dave review decisions — superseded by OBA source-of-truth model
 
-Dave answered the open questions on 2026-07-23:
+Dave answered the open questions on 2026-07-23, then corrected direction in chat after reviewing the operational feedback. The current decisions are:
 
-| Question | Decision |
+| Question | Current decision |
 |---|---|
-| Current OBA Core vs separate spike? | **Separate spike/restart.** Current OBA is scattered; production data exists but should be handled later as migration/import. |
-| Admin CRUD via OBA or external tool? | **Free/open-source/customizable only.** Avoid vendor lock-in. Direct use is good if adaptable; otherwise study/copy patterns into our own code. |
-| Telegram internally, WhatsApp client-facing? | **Yes.** |
-| Draft-only or auto-send? | **Auto-send can be good**, especially for customer-facing messages and instructor notifications, but any action-bearing group/channel message must be tight, reliable, and duplicate-safe. |
-| First record that must feel perfect? | **All of them:** surf class request, today's agenda, and payments. |
+| Current OBA Core vs separate spike? | **OBA stays source of truth.** `tipiti-cockpit` is reference/prototype only; no more work there. |
+| Admin CRUD via OBA or external tool? | **Free/open-source/customizable only.** Avoid vendor lock-in. Reuse/copy boring patterns when helpful, but OBA owns operational truth. |
+| Telegram internally, WhatsApp client-facing? | **Yes.** Telegram/WhatsApp are primary action channels; app login should not be required for every actor. |
+| Draft-only or auto-send? | **Auto-send can be good**, especially for customer-facing messages and instructor notifications, but any action-bearing group/channel message must be reliable, idempotent, and visible in OBA. |
+| First record that must feel perfect? | **All of them:** surf class request, today's agenda, and payments — expressed through simple Today/action cards first. |
 
 ## 12. Working product mantra
 

@@ -113,9 +113,9 @@ This is non-negotiable for surf operations.
 ### 2.5 Capacity rule
 
 - Capacity is **session-scoped**, not service-global.
-- Default max: 6 participants per group class session.
+- Default max: 6 participants per instructor in a group class session.
 - Participant count matters more than booking count.
-- Open question: if two instructors are available, can max capacity increase above 6 or should this create another class slot?
+- If a second instructor joins the same class, owners think of it as the same session with two instructors; OBA should allow capacity to expand intentionally instead of silently creating duplicate sessions.
 
 ### 2.6 Price rule
 
@@ -153,9 +153,9 @@ OBA must not treat unpaid future group classes as urgent debt by default.
 | Trigger | Action |
 |---|---|
 | Missing info | Ask intake questions naturally |
-| Booking confirmed | Send school Google Maps link |
+| Booking confirmed | Send school Google Maps link and, for shared group classes, make clear that other people may join the same lesson/session |
 | More than 5 days away | Explain schedule will be confirmed closer to date due to sea/tides |
-| Non-child/family customer | Mention post-class beer naturally, not as hard rule |
+| Non-child/family customer | Do not mention beer/free extras by default; keep optional perks out of MVP messaging unless owner explicitly enables them |
 | Day before / same day | Optional reminder with map/time/what to bring |
 
 ### 2.10 Edge cases
@@ -167,7 +167,7 @@ OBA must not treat unpaid future group classes as urgent debt by default.
 | Group exceeds 6 people | Suggest split into multiple sessions or private/custom arrangement |
 | Customer wants exact hour too early | Explain surf timing depends on conditions; collect preference |
 | Weather/sea changes | Owner can reschedule session and notify customers |
-| No payment yet | Normal until service day |
+| No payment once the class time/date has passed | Severe Today warning/action until payment is recorded, skipped with reason, or corrected |
 
 ---
 
@@ -179,7 +179,7 @@ OBA must not treat unpaid future group classes as urgent debt by default.
 |---|---|
 | Customer-facing name | Clase de surf privada |
 | OBA archetype | Private lesson / private package |
-| Price | 60€ total group price |
+| Price | Needs Tipiti confirmation; Dave's review suggests pricing is per person/participant, so OBA must not hard-code the old “60€ total group” assumption |
 | Duration | 1h30 |
 | Capacity | 1–5 people |
 | Includes | Board, wetsuit, instructor, RC/accident insurance, optional photos/videos |
@@ -221,10 +221,10 @@ Same as group class, but session is booking-owned:
 ### 3.6 Price rule
 
 ```txt
-price = 60€ total for group
+private_class_amount_due = owner/manager-confirmed price
 ```
 
-Important: participant count does **not** multiply the base price.
+Do not auto-calculate private surf class totals from the old 60€ group-price assumption until Tipiti confirms the current rule. Dave's review indicates it is likely per participant.
 
 ### 3.7 Payment rule
 
@@ -271,12 +271,20 @@ Credits have two separate concepts:
 
 Do not let one raw `credits` module permanently mean both.
 
-### 4.3 Intake questions
+### 4.3 Intake / sales rule
+
+Do **not** make credit packs a first-class booking-intake path in the first Today/action slice.
+
+Dave's review: clients normally will not know/ask for this product directly. Treat bonos as:
+
+1. owner/manager-sold credit packs;
+2. upsell suggestions when the customer intent matches;
+3. a payment/coverage option that appears only when the client already has an associated/bought credit pack.
 
 | Required? | Question | Field |
 |---|---|---|
-| Yes | ¿Qué bono quiere? | credit pack type |
-| Yes | ¿Para quién es el bono? | holder/client |
+| Yes, when selling pack | ¿Qué bono quiere? | credit pack type |
+| Yes, when selling pack | ¿Para quién es el bono? | holder/client |
 | Useful | ¿Cuándo quiere empezar a usarlo? | first intended use |
 | Open | ¿Caduca? | validity policy |
 
@@ -299,8 +307,9 @@ Do not let one raw `credits` module permanently mean both.
 ### 4.6 Price/payment rule
 
 - Pack sale has flat price.
-- Need confirm whether payment is always upfront.
-- Consumption should reduce remaining credits and optionally set booking/payment line to covered by credits.
+- Treat pack payment as upfront for now.
+- If a pack is active/associated, booking payment should show credit coverage instead of normal unpaid debt.
+- If a pack sale is expected but unpaid, create a Today warning/message action rather than silently treating the credits as usable.
 
 ### 4.7 Edge cases
 
