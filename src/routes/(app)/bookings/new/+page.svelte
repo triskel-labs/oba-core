@@ -6,7 +6,6 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { DOT_COLORS } from '$lib/features/services/colors';
 	import type { ServiceColorKey } from '$lib/features/services/colors';
-	import { getServiceWorkflowPresentation } from '$lib/features/services/workflow';
 	import type { PageData } from './$types';
 	import type { ServiceEdition } from '$lib/features/services/editions.types';
 	import ClientSearchInput from '$lib/components/ClientSearchInput.svelte';
@@ -17,10 +16,6 @@
 	// ── Service ───────────────────────────────────────────────────────────────
 	let selectedServiceId = $state(data.defaultServiceId || (data.services[0]?.id ?? ''));
 	const selectedService = $derived(data.services.find(s => s.id === selectedServiceId));
-	const selectedWorkflow = $derived(selectedServiceId ? data.workflowByServiceId[selectedServiceId] : undefined);
-	const workflowPresentation = $derived(
-		selectedWorkflow ? getServiceWorkflowPresentation(selectedWorkflow) : null
-	);
 	const modules = $derived(selectedService?.modules ?? {});
 	const hasEditions   = $derived('editions' in modules);
 	const hasSessions   = $derived('sessions' in modules);
@@ -96,6 +91,31 @@
 		return selectedService?.basePrice ?? '0';
 	}
 	const pricePreview = $derived(calcAmountDue());
+
+	function pricingLabel(mode: string | null | undefined): string {
+		switch (mode) {
+			case 'flat': return 'precio fijo';
+			case 'per_person': return 'por persona';
+			case 'per_session': return 'por sesión';
+			case 'per_person_per_session': return 'persona/sesión';
+			case 'per_day': return 'por día';
+			case 'per_night': return 'por noche';
+			case 'per_unit': return 'por unidad';
+			case 'per_unit_per_day': return 'unidad/día';
+			case 'per_person_per_day': return 'persona/día';
+			case 'per_hour': return 'por hora';
+			case 'per_half_day': return 'medio día';
+			default: return 'precio';
+		}
+	}
+
+	function serviceFacts(service: PageData['services'][number]): string[] {
+		const facts = [`€${service.basePrice} ${pricingLabel(service.pricingMode)}`];
+		if (service.durationMinutes) facts.push(`${service.durationMinutes} min`);
+		if (service.defaultSessionsIncluded) facts.push(`${service.defaultSessionsIncluded} sesión${service.defaultSessionsIncluded !== 1 ? 'es' : ''}`);
+		if (service.maxCapacity) facts.push(`${service.maxCapacity} plazas`);
+		return facts;
+	}
 </script>
 
 <div class="w-full space-y-4 p-3 md:p-6">
@@ -115,7 +135,7 @@
 				<h1 class="text-xl font-bold text-navy">Nueva reserva</h1>
 			</div>
 			<p class="mt-0.5 text-sm text-muted">
-				{workflowPresentation?.label ?? 'Servicio puntual'}
+				{selectedService?.name ?? 'Selecciona un servicio'}
 			</p>
 		</div>
 	</div>
@@ -147,34 +167,47 @@
 
 		<!-- SERVICE CARD -->
 		<div class="rounded-(--radius-card) border border-blue-100 bg-blue-50/60 p-4 space-y-3">
-			<div class="text-[10px] font-bold uppercase tracking-wider text-blue-700">📋 Servicio</div>
+			<div class="flex items-center justify-between gap-2">
+				<div class="text-[10px] font-bold uppercase tracking-wider text-blue-700">📋 Servicio</div>
+				{#if selectedService}
+					<span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-blue-100">
+						€{pricePreview}
+					</span>
+				{/if}
+			</div>
 
-			<select name="serviceId" bind:value={selectedServiceId} required
-				class="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold focus:border-ocean focus:outline-none">
+			<input type="hidden" name="serviceId" value={selectedServiceId} />
+			<div class="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
 				{#each data.services as s (s.id)}
-					<option value={s.id}>{s.name}</option>
+					<button
+						type="button"
+						onclick={() => { selectedServiceId = s.id; }}
+						class="w-full rounded-xl border bg-white p-3 text-left transition
+							{selectedServiceId === s.id ? 'border-ocean ring-2 ring-ocean/20' : 'border-blue-100 hover:border-ocean/40'}"
+					>
+						<div class="flex items-start gap-2">
+							<span class="mt-0.5 inline-block h-3 w-3 shrink-0 rounded-full"
+								style="background-color: {DOT_COLORS[(s.color ?? 'ocean') as ServiceColorKey]}"></span>
+							<div class="min-w-0 flex-1">
+								<div class="flex items-center justify-between gap-2">
+									<p class="truncate text-sm font-bold text-navy">{s.name}</p>
+									{#if selectedServiceId === s.id}
+										<span class="text-xs font-bold text-ocean">✓</span>
+									{/if}
+								</div>
+								<p class="mt-1 text-[11px] leading-snug text-muted">
+									{serviceFacts(s).join(' · ')}
+								</p>
+							</div>
+						</div>
+					</button>
 				{/each}
-			</select>
+			</div>
 
 			{#if selectedService}
-				{#if workflowPresentation && selectedWorkflow}
-					<div class="rounded-xl border border-blue-100 bg-white/80 p-3 text-[11px] text-blue-950 shadow-sm">
-						<div class="mb-2 flex flex-wrap items-center gap-1.5">
-							<span class="rounded-full bg-ocean/10 px-2 py-0.5 text-[10px] font-bold text-ocean">
-								{workflowPresentation.label}
-							</span>
-							<span class="rounded-full bg-sand px-2 py-0.5 text-[10px] font-semibold text-muted">
-								{selectedWorkflow.bookingAction.replaceAll('_', ' ')}
-							</span>
-						</div>
-						<p class="font-medium leading-snug">{workflowPresentation.operatorPrompt}</p>
-						<div class="mt-2 grid gap-1 text-[10px] text-muted">
-							<p><span class="font-semibold text-blue-800">Ownership:</span> {workflowPresentation.ownership}</p>
-							<p><span class="font-semibold text-blue-800">Capacidad:</span> {workflowPresentation.capacity}</p>
-						</div>
-					</div>
-				{/if}
-				<p class="text-[10px] text-gray-500">€{selectedService.basePrice} · {selectedService.pricingMode}</p>
+				<p class="rounded-lg bg-white/70 px-3 py-2 text-[11px] leading-snug text-muted ring-1 ring-blue-100">
+					Base: €{selectedService.basePrice} · {pricingLabel(selectedService.pricingMode)}{selectedService.durationMinutes ? ` · ${selectedService.durationMinutes} min` : ''}{selectedService.maxCapacity ? ` · ${selectedService.maxCapacity} plazas` : ''}
+				</p>
 			{/if}
 
 			<!-- Date / edition / time fields go here -->
