@@ -420,20 +420,213 @@ export async function listUnassignedEnrollments(serviceId: string, date: string)
 		);
 }
 
+export interface AssignableServiceSession {
+	id: string;
+	serviceId: string;
+	date: string;
+	time: string | null;
+	durationMinutes: number | null;
+	enrolledCount: number;
+	maxCapacity: number | null;
+	slotsLeft: number | null;
+}
+
+async function countParticipantsAssignedToSession(
+	sessionId: string,
+	excludeBookingId?: string | null
+): Promise<number> {
+	const conditions = [
+		eq(bookings.sessionId, sessionId),
+		ne(bookings.status, 'cancelled'),
+		eq(bookingClients.status, 'enrolled')
+	];
+	if (excludeBookingId) conditions.push(ne(bookings.id, excludeBookingId));
+
+	const [row] = await db
+		.select({ total: sql<string>`COALESCE(SUM(${bookingClients.participantCount}), 0)` })
+		.from(bookings)
+		.innerJoin(bookingClients, eq(bookingClients.bookingId, bookings.id))
+		.where(and(...conditions));
+	return parseInt(row?.total ?? '0');
+}
+
+async function countBookingParticipantsForAssignment(bookingId: string): Promise<number> {
+	const [row] = await db
+		.select({ total: sql<string>`COALESCE(SUM(${bookingClients.participantCount}), 0)` })
+		.from(bookingClients)
+		.where(and(eq(bookingClients.bookingId, bookingId), eq(bookingClients.status, 'enrolled')));
+	return parseInt(row?.total ?? '0');
+}
+
+async function assertServiceSessionCapacity(input: {
+	sessionId: string;
+	serviceId: string;
+	requestedParticipants: number;
+	excludeBookingId?: string | null;
+}): Promise<void> {
+	const [session] = await db
+		.select({
+			id: sessions.id,
+			ownerType: sessions.ownerType,
+			serviceId: sessions.serviceId,
+			status: sessions.status,
+			maxCapacity: services.maxCapacity
+		})
+		.from(sessions)
+		.leftJoin(services, eq(services.id, sessions.serviceId))
+		.where(eq(sessions.id, input.sessionId));
+
+	if (
+		!session ||
+		session.ownerType !== 'service' ||
+		session.serviceId !== input.serviceId ||
+		session.status === 'cancelled'
+	) {
+		throw new Error("Session does not belong to this booking's service");
+	}
+
+	if (session.maxCapacity == null) return;
+
+	const enrolled = await countParticipantsAssignedToSession(input.sessionId, input.excludeBookingId);
+	const available = session.maxCapacity - enrolled;
+	if (input.requestedParticipants > available) {
+		throw new Error(`Solo quedan ${available} plaza${available !== 1 ? 's' : ''} en esta sesión`);
+	}
+}
+
+export async function assertCanAssignBookingToServiceSession(input: {
+	bookingId?: string | null;
+	serviceId: string;
+	sessionId: string;
+	requestedParticipants?: number;
+}): Promise<void> {
+	const requestedParticipants = input.requestedParticipants
+		?? (input.bookingId ? await countBookingParticipantsForAssignment(input.bookingId) : 1);
+	await assertServiceSessionCapacity({
+		sessionId: input.sessionId,
+		serviceId: input.serviceId,
+		requestedParticipants,
+		excludeBookingId: input.bookingId ?? null
+	});
+}
+
+export async function listAssignableServiceSessionsForServices(
+	serviceIds: string[],
+	from: string,
+	to: string
+): Promise<AssignableServiceSession[]> {
+	if (serviceIds.length === 0) return [];
+	const rows = await db
+		.select({
+			id: sessions.id,
+			serviceId: sessions.serviceId,
+			date: sessions.date,
+			time: sessions.time,
+			durationMinutes: sessions.durationMinutes,
+			maxCapacity: services.maxCapacity
+		})
+		.from(sessions)
+		.innerJoin(services, eq(services.id, sessions.serviceId))
+		.where(
+			and(
+				inArray(sessions.serviceId, serviceIds),
+				eq(sessions.ownerType, 'service'),
+				ne(sessions.status, 'cancelled'),
+				gte(sessions.date, from),
+				lte(sessions.date, to)
+			)
+		)
+		.orderBy(sessions.date, sessions.time, sessions.sortOrder);
+
+	const counts = await Promise.all(rows.map((row) => countParticipantsAssignedToSession(row.id)));
+	return rows.map((row, index) => {
+		const enrolledCount = counts[index] ?? 0;
+		const maxCapacity = row.maxCapacity ?? null;
+		return {
+			id: row.id,
+			serviceId: row.serviceId!,
+			date: row.date,
+			time: row.time,
+			durationMinutes: row.durationMinutes,
+			enrolledCount,
+			maxCapacity,
+			slotsLeft: maxCapacity != null ? maxCapacity - enrolledCount : null
+		};
+	});
+}
+
+async function syncBookingParticipantsToServiceSession(
+	bookingId: string,
+	sessionId: string
+): Promise<void> {
+	const participantRows = await db
+		.select({
+			id: bookingParticipants.id,
+			name: bookingParticipants.name,
+			sortOrder: bookingParticipants.sortOrder
+		})
+		.from(bookingParticipants)
+		.innerJoin(bookingClients, eq(bookingParticipants.bookingClientId, bookingClients.id))
+		.where(and(eq(bookingClients.bookingId, bookingId), eq(bookingClients.status, 'enrolled')))
+		.orderBy(bookingParticipants.sortOrder);
+
+	if (participantRows.length === 0) return;
+	await db
+		.insert(sessionParticipants)
+		.values(participantRows.map((participant, index) => ({
+			id: crypto.randomUUID(),
+			sessionId,
+			bookingParticipantId: participant.id,
+			name: participant.name,
+			sortOrder: participant.sortOrder ?? index
+		})))
+		.onConflictDoNothing();
+}
+
+async function removeBookingParticipantsFromServiceSessions(bookingId: string): Promise<void> {
+	const participantRows = await db
+		.select({ id: bookingParticipants.id })
+		.from(bookingParticipants)
+		.innerJoin(bookingClients, eq(bookingParticipants.bookingClientId, bookingClients.id))
+		.where(eq(bookingClients.bookingId, bookingId));
+	const participantIds = participantRows.map((participant) => participant.id);
+	if (participantIds.length === 0) return;
+	const serviceParticipantRows = await db
+		.select({ id: sessionParticipants.id })
+		.from(sessionParticipants)
+		.innerJoin(sessions, eq(sessionParticipants.sessionId, sessions.id))
+		.where(
+			and(
+				inArray(sessionParticipants.bookingParticipantId, participantIds),
+				eq(sessions.ownerType, 'service')
+			)
+		);
+	const serviceParticipantIds = serviceParticipantRows.map((participant) => participant.id);
+	if (serviceParticipantIds.length === 0) return;
+	await db.delete(sessionParticipants).where(inArray(sessionParticipants.id, serviceParticipantIds));
+}
+
 export async function assignBookingToSession(
 	bookingId: string,
 	sessionId: string | null
 ): Promise<void> {
+	const [booking] = await db
+		.select({ serviceId: bookings.serviceId })
+		.from(bookings)
+		.where(eq(bookings.id, bookingId));
+	if (!booking?.serviceId) throw new Error('Booking not found');
+
 	if (sessionId !== null) {
-		const [session] = await db.select().from(sessions).where(eq(sessions.id, sessionId));
-		const [booking] = await db
-			.select({ serviceId: bookings.serviceId })
-			.from(bookings)
-			.where(eq(bookings.id, bookingId));
-		if (!session || session.ownerType !== 'service' || session.serviceId !== booking?.serviceId)
-			throw new Error("Session does not belong to this booking's service");
+		await assertCanAssignBookingToServiceSession({
+			bookingId,
+			serviceId: booking.serviceId,
+			sessionId
+		});
 	}
+
+	await removeBookingParticipantsFromServiceSessions(bookingId);
 	await db.update(bookings).set({ sessionId }).where(eq(bookings.id, bookingId));
+	if (sessionId !== null) await syncBookingParticipantsToServiceSession(bookingId, sessionId);
 }
 
 // ── Core CRUD ────────────────────────────────────────────────────────────────

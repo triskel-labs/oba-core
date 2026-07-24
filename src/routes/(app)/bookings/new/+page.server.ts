@@ -1,6 +1,12 @@
 import { fail } from '@sveltejs/kit';
 import { createBooking, countEnrolledClientsForService, recalcBookingAmounts } from '$lib/features/bookings/queries';
-import { createSession, addParticipant as addSessionParticipant } from '$lib/features/sessions/queries';
+import {
+	createSession,
+	addParticipant as addSessionParticipant,
+	assignBookingToSession,
+	assertCanAssignBookingToServiceSession,
+	listAssignableServiceSessionsForServices
+} from '$lib/features/sessions/queries';
 import { setEnrollmentParticipantCount, addParticipant as addEnrollmentParticipant } from '$lib/features/bookings/participants.queries';
 import { calculateAmount } from '$lib/utils/pricing';
 import { listServices, getService } from '$lib/features/services/queries';
@@ -32,8 +38,28 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	);
 
 	const workflowByServiceId = getServiceWorkflowMetadataByServiceId(services);
+	const groupServiceIds = services
+		.filter((service) => workflowByServiceId[service.id]?.archetype === 'group_class')
+		.map((service) => service.id);
+	const today = new Date().toISOString().slice(0, 10);
+	const toDate = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
+	const assignableSessions = groupServiceIds.length > 0
+		? await listAssignableServiceSessionsForServices(groupServiceIds, today, toDate)
+		: [];
+	const sessionsByServiceId = Object.groupBy(assignableSessions, (session) => session.serviceId);
 
-	return { services, instructors, clients, defaultDate, defaultTime, defaultServiceId, defaultEditionId, editionsByService, workflowByServiceId };
+	return {
+		services,
+		instructors,
+		clients,
+		defaultDate,
+		defaultTime,
+		defaultServiceId,
+		defaultEditionId,
+		editionsByService,
+		workflowByServiceId,
+		sessionsByServiceId
+	};
 };
 
 export const actions: Actions = {
@@ -49,6 +75,7 @@ export const actions: Actions = {
 
 		const serviceWorkflow = classifyServiceWorkflowForService(service);
 		const isPrivateLessonWorkflow = serviceWorkflow === 'private_lesson';
+		const isGroupClassWorkflow = serviceWorkflow === 'group_class';
 
 		const clientIds = form.getAll('clientId').map(String).filter(Boolean);
 		if (clientIds.length === 0) return fail(400, { error: 'At least one client is required' });
@@ -126,7 +153,7 @@ export const actions: Actions = {
 		}
 
 		// ── Accommodation ──────────────────────────────────────────────────────
-		if ('inventory' in (service.modules ?? {})) {
+		if (!isPrivateLessonWorkflow && !isGroupClassWorkflow && 'inventory' in (service.modules ?? {})) {
 			const checkIn  = form.get('date')?.toString() ?? '';
 			const checkOut = form.get('dateEnd')?.toString() || null;
 			if (!checkIn) return fail(400, { error: 'Start date is required' });
@@ -166,15 +193,30 @@ export const actions: Actions = {
 			const edition = await getServiceEdition(serviceEditionId);
 			if (edition) { date = edition.startDate; dateEnd = edition.endDate; }
 		}
-		if ((isPrivateLessonWorkflow || 'sessions' in (service.modules ?? {})) && sessionScheduleMode === 'scheduled') {
+		if ((isPrivateLessonWorkflow || isGroupClassWorkflow) && sessionScheduleMode === 'scheduled') {
 			date = scheduledSessionDate;
 		}
 		if (!date) return fail(400, { error: 'Date is required' });
 
 		// ── Capacity check ─────────────────────────────────────────────────────
 		const totalParticipantsRequested = participantCounts.reduce((s, n) => s + n, 0);
+		const selectedSessionId = form.get('sessionId')?.toString() || undefined;
 
-		if (!isPrivateLessonWorkflow && 'roster' in (service.modules ?? {}) && serviceEditionId) {
+		if (isGroupClassWorkflow) {
+			if (!selectedSessionId) return fail(400, { error: 'Selecciona una sesión para continuar' });
+			try {
+				await assertCanAssignBookingToServiceSession({
+					bookingId: null,
+					serviceId,
+					sessionId: selectedSessionId,
+					requestedParticipants: totalParticipantsRequested
+				});
+			} catch (e) {
+				return fail(400, { error: (e as Error).message });
+			}
+		}
+
+		if (!isPrivateLessonWorkflow && !isGroupClassWorkflow && 'roster' in (service.modules ?? {}) && serviceEditionId) {
 			const edition = await getServiceEdition(serviceEditionId);
 			if (edition?.maxCapacity) {
 				const enrolled  = await countEnrolledClientsForEdition(serviceEditionId);
@@ -182,7 +224,7 @@ export const actions: Actions = {
 				if (totalParticipantsRequested > available)
 					return fail(400, { error: `Solo quedan ${available} plaza${available !== 1 ? 's' : ''} en esta edición` });
 			}
-		} else if (!isPrivateLessonWorkflow && 'roster' in (service.modules ?? {}) && service.maxCapacity) {
+		} else if (!isPrivateLessonWorkflow && !isGroupClassWorkflow && 'roster' in (service.modules ?? {}) && service.maxCapacity) {
 			const enrolled  = await countEnrolledClientsForService(serviceId);
 			const available = service.maxCapacity - enrolled;
 			if (totalParticipantsRequested > available)
@@ -195,7 +237,7 @@ export const actions: Actions = {
 
 		// ── Lessons (sessions module) ──────────────────────────────────────────
 		// Private lessons can be left unscheduled or scheduled from the create-booking modal.
-		if (isPrivateLessonWorkflow || 'sessions' in (service.modules ?? {})) {
+		if (isPrivateLessonWorkflow) {
 			const sessionsIncluded = service.defaultSessionsIncluded ?? 1;
 			const isScheduledNow = sessionScheduleMode === 'scheduled';
 			const sessionTime = form.get('sessionTime')?.toString() || undefined;
@@ -248,6 +290,27 @@ export const actions: Actions = {
 					? 'Booking created — session scheduled'
 					: `Booking created — ${sessionsIncluded} session${sessionsIncluded !== 1 ? 's' : ''} to schedule`
 			};
+		}
+
+		if (isGroupClassWorkflow) {
+			const booking = await createBooking({
+				serviceId,
+				quantity,
+				date,
+				isFlexible: false,
+				status: 'confirmed',
+				spotNotes,
+				notes,
+				clients: bookingClients
+			});
+			await autoCreateParticipants(booking);
+			try {
+				await assignBookingToSession(booking.id, selectedSessionId!);
+			} catch (e) {
+				return fail(400, { error: (e as Error).message });
+			}
+			await recalcBookingAmounts(booking.id);
+			return { bookingId: booking.id, message: 'Booking created — assigned to session' };
 		}
 
 		// ── Regular / camp ─────────────────────────────────────────────────────

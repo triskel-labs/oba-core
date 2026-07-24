@@ -12,6 +12,17 @@
 	import ClientSearchInput from '$lib/components/ClientSearchInput.svelte';
 
 	let { data }: { data: PageData } = $props();
+	type AssignableSession = {
+		id: string;
+		serviceId: string;
+		date: string;
+		time: string | null;
+		durationMinutes: number | null;
+		enrolledCount: number;
+		maxCapacity: number | null;
+		slotsLeft: number | null;
+	};
+	const dataWithSessions = $derived(data as PageData & { sessionsByServiceId: Record<string, AssignableSession[]> });
 	let loading = $state(false);
 
 	// ── Service ───────────────────────────────────────────────────────────────
@@ -25,6 +36,10 @@
 	const hasInstructor = $derived('instructor' in modules);
 	const hasCredits    = $derived('credits' in modules);
 	const isPrivateLessonScheduling = $derived(selectedWorkflow?.archetype === 'private_lesson');
+	const isGroupSessionBooking = $derived(selectedWorkflow?.archetype === 'group_class');
+	const groupSessions = $derived(selectedServiceId ? (dataWithSessions.sessionsByServiceId[selectedServiceId] ?? []) : []);
+	let selectedGroupSessionId = $state('');
+	const selectedGroupSession = $derived(groupSessions.find((session) => session.id === selectedGroupSessionId));
 	const showDateField = $derived(!hasSessions && !hasEditions);
 	const showTimeField = $derived(!hasSessions && !hasEditions && !hasInventory);
 	const showInstructor = $derived(hasInstructor && !hasSessions);
@@ -84,6 +99,11 @@
 		if (!isPrivateLessonScheduling) {
 			sessionScheduleMode = 'later';
 			sessionModalOpen = false;
+		}
+		if (!isGroupSessionBooking) {
+			selectedGroupSessionId = '';
+		} else if (selectedGroupSessionId && !groupSessions.some((session) => session.id === selectedGroupSessionId)) {
+			selectedGroupSessionId = '';
 		}
 		if (selectedService?.durationMinutes && sessionScheduleMode === 'later') {
 			scheduledSessionDuration = selectedService.durationMinutes;
@@ -187,7 +207,12 @@
 		<!-- SERVICE CARD -->
 		<div class="rounded-(--radius-card) border border-blue-100 bg-blue-50/60 p-4 space-y-3">
 			<div class="flex items-center justify-between gap-2">
-				<div class="text-[10px] font-bold uppercase tracking-wider text-blue-700">📋 Servicio</div>
+				<div>
+					<div class="text-[10px] font-bold uppercase tracking-wider text-blue-700">📋 Servicio</div>
+					{#if data.services.length > 5}
+						<p class="mt-0.5 text-[10px] font-medium text-blue-600">{data.services.length} servicios · desplaza esta lista ↓</p>
+					{/if}
+				</div>
 				{#if selectedService}
 					<span class="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-blue-100">
 						€{pricePreview}
@@ -196,7 +221,9 @@
 			</div>
 
 			<input type="hidden" name="serviceId" value={selectedServiceId} />
-			<div class="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+			<div class="relative">
+				<div class="max-h-[26rem] overflow-y-auto rounded-2xl border border-blue-100 bg-white/45 p-1 pr-2 shadow-inner overscroll-contain">
+					<div class="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
 				{#each data.services as s (s.id)}
 					<button
 						type="button"
@@ -220,7 +247,12 @@
 							</div>
 						</div>
 					</button>
-				{/each}
+						{/each}
+					</div>
+				</div>
+				{#if data.services.length > 5}
+					<div class="pointer-events-none absolute inset-x-2 bottom-0 h-8 rounded-b-2xl bg-gradient-to-t from-blue-50/95 to-transparent"></div>
+				{/if}
 			</div>
 
 			{#if selectedService}
@@ -252,6 +284,39 @@
 					{:else}
 						<p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
 							Sin ediciones. <a href="/services/{selectedService?.id}" class="underline">Añadir</a>
+						</p>
+					{/if}
+				</div>
+
+
+			{:else if isGroupSessionBooking}
+				<input type="hidden" name="date" value={selectedGroupSession?.date ?? today} />
+				{#if selectedGroupSession}
+					<input type="hidden" name="sessionId" value={selectedGroupSession.id} />
+				{/if}
+				<div class="border-t border-blue-100 pt-3 space-y-2">
+					<p class="text-[10px] font-semibold text-gray-500">Sesión de grupo</p>
+					{#if groupSessions.length > 0}
+						<select
+							bind:value={selectedGroupSessionId}
+							required
+							class="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-xs focus:border-ocean focus:outline-none"
+						>
+							<option value="">Seleccionar sesión...</option>
+							{#each groupSessions as session (session.id)}
+								<option value={session.id} disabled={session.slotsLeft !== null && session.slotsLeft <= 0}>
+									{session.date}{session.time ? ` · ${session.time}` : ''}{session.durationMinutes ? ` · ${session.durationMinutes} min` : ''}{session.maxCapacity !== null ? ` · ${session.enrolledCount}/${session.maxCapacity} plazas` : ''}
+								</option>
+							{/each}
+						</select>
+						{#if selectedGroupSession}
+							<p class="rounded-lg bg-sand px-3 py-2 text-[11px] text-muted">
+								👥 La reserva se asignará a esta sesión y sus participantes contarán contra la capacidad{selectedGroupSession.slotsLeft !== null ? ` (${selectedGroupSession.slotsLeft} libres)` : ''}.
+							</p>
+						{/if}
+					{:else}
+						<p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
+							No hay sesiones futuras para este servicio. Crea una sesión desde el servicio antes de apuntar participantes.
 						</p>
 					{/if}
 				</div>
@@ -467,7 +532,7 @@
 
 	<!-- CTA -->
 	<div class="flex items-center gap-4 pt-2">
-		<button type="submit" disabled={loading || !selectedClient || (isPrivateLessonScheduling && sessionScheduleMode === 'scheduled' && !scheduledSessionDate)}
+		<button type="submit" disabled={loading || !selectedClient || (isPrivateLessonScheduling && sessionScheduleMode === 'scheduled' && !scheduledSessionDate) || (isGroupSessionBooking && !selectedGroupSessionId)}
 			class="btn-primary px-8 py-2.5 text-sm font-semibold">
 			{loading ? 'Creando...' : 'Crear reserva →'}
 		</button>
@@ -475,8 +540,9 @@
 			<p class="text-xs text-muted">Selecciona un cliente para continuar</p>
 		{/if}
 	</div>
+</form>
 
-	{#if sessionModalOpen && isPrivateLessonScheduling}
+{#if sessionModalOpen && isPrivateLessonScheduling}
 		<div
 			class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
 			onclick={() => { sessionModalOpen = false; }}
@@ -550,21 +616,41 @@
 		</div>
 	{/if}
 
-	</form>
-
-	<!-- PLACEHOLDER SECTIONS (visual continuity) -->
-	{#if selectedService}
-		{#if hasSessions}
-			<div class="rounded-(--radius-card) border border-green-100 bg-green-50/40 p-4">
-				<div class="mb-2 text-[10px] font-bold uppercase tracking-wider text-green-700">⏱ Sesiones</div>
-				<p class="text-sm italic text-muted">Las sesiones se crean desde el detalle de reserva.</p>
-			</div>
-		{/if}
-		{#if 'inventory' in modules}
-			<div class="rounded-(--radius-card) border border-orange-100 bg-white p-4">
-				<div class="mb-2 text-[10px] font-bold uppercase tracking-wider text-orange-700">🎒 Equipamiento</div>
-				<p class="text-sm italic text-muted">El equipo se asigna desde el detalle de reserva.</p>
-			</div>
-		{/if}
+<!-- PLACEHOLDER SECTIONS (visual continuity) -->
+{#if selectedService}
+	{#if hasSessions}
+		<div class="rounded-(--radius-card) border border-green-100 bg-green-50/40 p-4">
+			<div class="mb-2 text-[10px] font-bold uppercase tracking-wider text-green-700">⏱ Sesiones</div>
+			{#if isPrivateLessonScheduling && sessionScheduleMode === 'scheduled'}
+				<div class="rounded-lg bg-white/80 px-3 py-2 text-sm text-gray-700 ring-1 ring-green-100">
+					<p class="font-semibold text-green-700">Sesión preparada</p>
+					<p class="mt-0.5 text-xs text-muted">
+						{scheduledSessionDate}{scheduledSessionTime ? ` · ${scheduledSessionTime}` : ''}{scheduledSessionDuration ? ` · ${scheduledSessionDuration} min` : ''}{scheduledSessionInstructorId ? ' · instructor asignado' : ''}
+					</p>
+					<p class="mt-1 text-[11px] text-muted">Se creará al guardar esta reserva y se verá en el detalle.</p>
+				</div>
+			{:else if isPrivateLessonScheduling}
+				<p class="text-sm italic text-muted">Sesión pendiente: se resolverá desde el detalle de reserva.</p>
+			{:else if isGroupSessionBooking && selectedGroupSession}
+				<div class="rounded-lg bg-white/80 px-3 py-2 text-sm text-gray-700 ring-1 ring-green-100">
+					<p class="font-semibold text-green-700">Sesión seleccionada</p>
+					<p class="mt-0.5 text-xs text-muted">
+						{selectedGroupSession.date}{selectedGroupSession.time ? ` · ${selectedGroupSession.time}` : ''}{selectedGroupSession.durationMinutes ? ` · ${selectedGroupSession.durationMinutes} min` : ''}{selectedGroupSession.maxCapacity !== null ? ` · ${selectedGroupSession.enrolledCount}/${selectedGroupSession.maxCapacity} plazas` : ''}
+					</p>
+					<p class="mt-1 text-[11px] text-muted">La reserva y sus participantes se vincularán a esta sesión.</p>
+				</div>
+			{:else if isGroupSessionBooking}
+				<p class="text-sm italic text-muted">Selecciona una sesión de grupo arriba para continuar.</p>
+			{:else}
+				<p class="text-sm italic text-muted">Las sesiones se configuran desde el detalle de reserva.</p>
+			{/if}
+		</div>
 	{/if}
+	{#if 'inventory' in modules}
+		<div class="rounded-(--radius-card) border border-orange-100 bg-white p-4">
+			<div class="mb-2 text-[10px] font-bold uppercase tracking-wider text-orange-700">🎒 Equipamiento</div>
+			<p class="text-sm italic text-muted">El equipo se asigna desde el detalle de reserva.</p>
+		</div>
+	{/if}
+{/if}
 </div>

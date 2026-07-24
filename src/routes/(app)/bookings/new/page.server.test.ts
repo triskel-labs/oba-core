@@ -8,7 +8,21 @@ vi.mock('$lib/features/bookings/queries', () => ({
 
 vi.mock('$lib/features/sessions/queries', () => ({
 	createSession: vi.fn(),
-	addParticipant: vi.fn()
+	addParticipant: vi.fn(),
+	assignBookingToSession: vi.fn(),
+	assertCanAssignBookingToServiceSession: vi.fn(),
+	listAssignableServiceSessionsForServices: vi.fn(async () => [
+		{
+			id: 'group-session-1',
+			serviceId: 'group-class',
+			date: '2026-08-03',
+			time: '10:00',
+			durationMinutes: 90,
+			enrolledCount: 3,
+			maxCapacity: 6,
+			slotsLeft: 3
+		}
+	])
 }));
 
 vi.mock('$lib/features/bookings/participants.queries', () => ({
@@ -63,14 +77,21 @@ vi.mock('$lib/server/permissions', () => ({
 
 import { load, actions } from './+page.server';
 import { createBooking, recalcBookingAmounts } from '$lib/features/bookings/queries';
-import { createSession, addParticipant as addSessionParticipant } from '$lib/features/sessions/queries';
-import { addParticipant as addEnrollmentParticipant } from '$lib/features/bookings/participants.queries';
+import {
+	createSession,
+	addParticipant as addSessionParticipant,
+	assignBookingToSession,
+	assertCanAssignBookingToServiceSession,
+	listAssignableServiceSessionsForServices
+} from '$lib/features/sessions/queries';
+import { addParticipant as addEnrollmentParticipant, setEnrollmentParticipantCount } from '$lib/features/bookings/participants.queries';
 import { getService } from '$lib/features/services/queries';
 
 beforeEach(() => {
 	vi.clearAllMocks();
 	vi.mocked(recalcBookingAmounts).mockResolvedValue(undefined);
 	(addEnrollmentParticipant as any).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' });
+	(setEnrollmentParticipantCount as any).mockResolvedValue([{ id: 'participant-2', name: 'Participante 2' }]);
 	(addSessionParticipant as any).mockResolvedValue({});
 });
 
@@ -110,6 +131,21 @@ describe('new booking load workflow metadata', () => {
 				archetype: 'private_lesson',
 				operatorQuestion: 'schedule_private_sessions'
 			}
+		});
+		expect(listAssignableServiceSessionsForServices).toHaveBeenCalledWith(
+			['group-class'],
+			expect.any(String),
+			expect.any(String)
+		);
+		expect(result.sessionsByServiceId).toMatchObject({
+			'group-class': [
+				{
+					id: 'group-session-1',
+					date: '2026-08-03',
+					enrolledCount: 3,
+					slotsLeft: 3
+				}
+			]
 		});
 	});
 });
@@ -243,5 +279,75 @@ describe('new booking private lesson scheduling and participant sync', () => {
 			bookingParticipantId: 'participant-1',
 			name: 'Ana Surf'
 		});
+	});
+});
+
+describe('new booking group session assignment', () => {
+	it('assigns a new group booking to the chosen service session after capacity validation', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'group-class',
+			name: 'Group class',
+			modules: { sessions: {}, roster: {}, inventory: { perParticipant: true } },
+			type: 'lesson',
+			basePrice: '35.00',
+			pricingMode: 'per_person',
+			maxCapacity: 6
+		} as any);
+		vi.mocked(createBooking).mockResolvedValue({
+			id: 'booking-1',
+			clients: [{ id: 'booking-client-1', clientId: 'client-1', clientFirstName: 'Ana' }]
+		} as any);
+		vi.mocked(addEnrollmentParticipant).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' } as any);
+
+		const form = baseBookingForm({
+			serviceId: 'group-class',
+			sessionId: 'group-session-1',
+			participantCount: '2',
+			date: '2026-08-03'
+		});
+
+		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(result).toMatchObject({ bookingId: 'booking-1' });
+		expect(assertCanAssignBookingToServiceSession).toHaveBeenCalledWith({
+			bookingId: null,
+			serviceId: 'group-class',
+			sessionId: 'group-session-1',
+			requestedParticipants: 2
+		});
+		expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({
+			serviceId: 'group-class',
+			date: '2026-08-03',
+			isFlexible: false,
+			status: 'confirmed'
+		}));
+		expect(assignBookingToSession).toHaveBeenCalledWith('booking-1', 'group-session-1');
+		expect(recalcBookingAmounts).toHaveBeenCalledWith('booking-1');
+	});
+
+	it('returns a form failure before creating the booking when the selected group session is full', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'group-class',
+			name: 'Group class',
+			modules: { sessions: {}, roster: {} },
+			basePrice: '35.00',
+			pricingMode: 'per_person',
+			maxCapacity: 6
+		} as any);
+		vi.mocked(assertCanAssignBookingToServiceSession).mockRejectedValueOnce(new Error('Solo quedan 1 plaza en esta sesión'));
+
+		const form = baseBookingForm({
+			serviceId: 'group-class',
+			sessionId: 'group-session-1',
+			participantCount: '2',
+			date: '2026-08-03'
+		});
+
+		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(result.status).toBe(400);
+		expect(result.data.error).toBe('Solo quedan 1 plaza en esta sesión');
+		expect(createBooking).not.toHaveBeenCalled();
+		expect(assignBookingToSession).not.toHaveBeenCalled();
 	});
 });
