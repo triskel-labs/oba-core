@@ -10,6 +10,7 @@ import { listEditionsForService, countEnrolledClientsForEdition, getServiceEditi
 import type { ServiceEdition } from '$lib/features/services/editions.types';
 import type { Actions, PageServerLoad } from './$types';
 import { requireRole } from '$lib/server/permissions';
+import { getServiceWorkflowMetadataByServiceId } from '$lib/features/services/workflow';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	requireRole(locals, 'admin', 'owner', 'manager');
@@ -30,7 +31,9 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 			.map(async s => { editionsByService[s.id] = await listEditionsForService(s.id); })
 	);
 
-	return { services, instructors, clients, defaultDate, defaultTime, defaultServiceId, defaultEditionId, editionsByService };
+	const workflowByServiceId = getServiceWorkflowMetadataByServiceId(services);
+
+	return { services, instructors, clients, defaultDate, defaultTime, defaultServiceId, defaultEditionId, editionsByService, workflowByServiceId };
 };
 
 export const actions: Actions = {

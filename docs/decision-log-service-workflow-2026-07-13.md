@@ -1,19 +1,19 @@
 # OBA Core Service Workflow Refactor — CEO Decision Log
 
 Date: 2026-07-13  
-Branch: `feat/service-workflow-resolver`
+Branch: `feat/oba-workflow-archetype-sequence`
 
 ## Executive status
 
-Assessment: **YELLOW — directionally correct, not yet product-complete**.
+Assessment: **GREEN for Phase 1 foundation — workflow archetype metadata is now test-backed; YELLOW for full product completeness**.
 
-The branch is a good first cut toward the intended OBA product grammar:
+This PR locks the first professional-team layer of the OBA product grammar:
 
-> Service template → Edition/Run → Session → Booking/Enrollment → Participant → Attendance
+> Service template → Workflow archetype → UI metadata → Edition/Run → Session → Booking/Enrollment → Participant → Attendance
 
-It introduces a central service workflow classifier and removes runtime dependency on legacy `booking_sessions` from the touched feature paths. That is the right architectural direction.
+It introduces a central service workflow classifier and exposes workflow metadata to the new-booking UI load data. That is the right first layer before more cockpit/actions work.
 
-It is not yet a complete field-operations cockpit refactor. The current booking UI still exposes raw module behavior, group-session assignment and session-scoped capacity are incomplete, and migration/backfill policy is still unresolved.
+It is not yet a complete field-operations cockpit refactor. The current booking UI still consumes some raw module behavior, group-session assignment and session-scoped capacity are incomplete, and migration/backfill policy is still unresolved.
 
 ## CEO rule for this work
 
@@ -32,9 +32,10 @@ Engineering must not silently finalize product semantics for:
 
 | Decision | Current branch behavior | CEO status |
 |---|---|---|
-| Workflow classifier exists | Services are routed through `classifyServiceWorkflow()` | Directionally approved as architecture |
+| Workflow classifier exists | Services are classified through `classifyServiceWorkflow()` | Directionally approved as architecture |
+| Workflow metadata reaches UI load data | New-booking load returns `workflowByServiceId` | Phase 2 foundation, UI consumption still next |
 | Credits precedence | Any service with `credits` becomes `credit_pack` | Needs CEO/product approval |
-| Edition workflow | Any service with `editions` becomes `edition_roster` and requires an edition | Needs CEO/product approval, likely right for camps/runs |
+| Edition workflow | Any service with `editions` becomes `camp_course_run` and requires an edition/run | Needs CEO/product approval, likely right for camps/runs |
 | Private sessions | `sessions` without roster creates booking-owned sessions | Likely approved |
 | Group sessions | `roster + sessions` creates booking/enrollment without booking-owned sessions | Needs workflow/UI approval |
 | Session ownership | private=`booking`, group=`service`, edition=`edition` | Directionally approved, migration-sensitive |
