@@ -100,7 +100,10 @@ corepack pnpm db:push       # drizzle-kit push
 corepack pnpm db:generate   # drizzle-kit generate
 corepack pnpm db:migrate    # drizzle-kit migrate
 corepack pnpm db:studio     # drizzle-kit studio
+corepack pnpm audit:service-workflows  # report stale service workflow/module shapes
 ```
+
+`audit:service-workflows` reads `DATABASE_URL` from the environment or local `.env` and prints service records whose business/data shape no longer matches their `modules` metadata. Use `-- --json` for machine-readable output.
 
 ## Development model
 
