@@ -7,7 +7,8 @@ vi.mock('$lib/features/bookings/queries', () => ({
 }));
 
 vi.mock('$lib/features/sessions/queries', () => ({
-	createSession: vi.fn()
+	createSession: vi.fn(),
+	addParticipant: vi.fn()
 }));
 
 vi.mock('$lib/features/bookings/participants.queries', () => ({
@@ -53,14 +54,15 @@ vi.mock('$lib/server/permissions', () => ({
 
 import { load, actions } from './+page.server';
 import { createBooking, recalcBookingAmounts } from '$lib/features/bookings/queries';
-import { createSession } from '$lib/features/sessions/queries';
-import { addParticipant } from '$lib/features/bookings/participants.queries';
+import { createSession, addParticipant as addSessionParticipant } from '$lib/features/sessions/queries';
+import { addParticipant as addEnrollmentParticipant } from '$lib/features/bookings/participants.queries';
 import { getService } from '$lib/features/services/queries';
 
 beforeEach(() => {
 	vi.clearAllMocks();
 	vi.mocked(recalcBookingAmounts).mockResolvedValue(undefined);
-	(addParticipant as any).mockResolvedValue({});
+	(addEnrollmentParticipant as any).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' });
+	(addSessionParticipant as any).mockResolvedValue({});
 });
 
 function bookingRequest(form: FormData): Request {
@@ -99,21 +101,24 @@ describe('new booking load workflow metadata', () => {
 	});
 });
 
-describe('new booking private lesson scheduling', () => {
-	it('creates a booking-owned session from the scheduling modal fields', async () => {
+describe('new booking private lesson scheduling and participant sync', () => {
+	it('creates the scheduled session from modal fields and syncs booking participants to every created session', async () => {
 		vi.mocked(getService).mockResolvedValue({
 			id: 'private-lesson',
 			name: 'Private lesson',
 			modules: { sessions: {} },
 			basePrice: '50.00',
 			pricingMode: 'flat',
-			defaultSessionsIncluded: 1
+			defaultSessionsIncluded: 2
 		} as any);
 		vi.mocked(createBooking).mockResolvedValue({
 			id: 'booking-1',
 			clients: [{ id: 'booking-client-1', clientId: 'client-1', clientFirstName: 'Ana' }]
 		} as any);
-		vi.mocked(createSession).mockResolvedValue({ id: 'session-1' } as any);
+		vi.mocked(createSession)
+			.mockResolvedValueOnce({ id: 'session-1' } as any)
+			.mockResolvedValueOnce({ id: 'session-2' } as any);
+		vi.mocked(addEnrollmentParticipant).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' } as any);
 
 		const form = baseBookingForm({
 			sessionScheduleMode: 'scheduled',
@@ -126,8 +131,7 @@ describe('new booking private lesson scheduling', () => {
 		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
 
 		expect(result).toMatchObject({ bookingId: 'booking-1' });
-		expect(createSession).toHaveBeenCalledTimes(1);
-		expect(createSession).toHaveBeenCalledWith({
+		expect(createSession).toHaveBeenNthCalledWith(1, {
 			ownerType: 'booking',
 			bookingId: 'booking-1',
 			date: '2026-08-03',
@@ -136,5 +140,56 @@ describe('new booking private lesson scheduling', () => {
 			instructorIds: ['inst-1'],
 			sortOrder: 0
 		});
+		expect(createSession).toHaveBeenNthCalledWith(2, {
+			ownerType: 'booking',
+			bookingId: 'booking-1',
+			date: '2026-08-03',
+			sortOrder: 1
+		});
+		expect(addSessionParticipant).toHaveBeenCalledTimes(2);
+		expect(addSessionParticipant).toHaveBeenCalledWith({
+			sessionId: 'session-1',
+			bookingParticipantId: 'participant-1',
+			name: 'Ana Surf'
+		});
+		expect(addSessionParticipant).toHaveBeenCalledWith({
+			sessionId: 'session-2',
+			bookingParticipantId: 'participant-1',
+			name: 'Ana Surf'
+		});
+	});
+
+	it('syncs booking participants into unscheduled sessions created with the booking', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'private-lesson',
+			name: 'Private lesson',
+			modules: { sessions: {} },
+			basePrice: '50.00',
+			pricingMode: 'flat',
+			defaultSessionsIncluded: 2
+		} as any);
+		vi.mocked(createBooking).mockResolvedValue({
+			id: 'booking-1',
+			clients: [{ id: 'booking-client-1', clientId: 'client-1', clientFirstName: 'Ana' }]
+		} as any);
+		vi.mocked(createSession)
+			.mockResolvedValueOnce({ id: 'session-1' } as any)
+			.mockResolvedValueOnce({ id: 'session-2' } as any);
+		vi.mocked(addEnrollmentParticipant).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' } as any);
+
+		await (actions.default as any)({ request: bookingRequest(baseBookingForm()), locals: {} });
+
+		expect(addSessionParticipant).toHaveBeenCalledTimes(2);
+		expect(addSessionParticipant).toHaveBeenCalledWith({
+			sessionId: 'session-1',
+			bookingParticipantId: 'participant-1',
+			name: 'Ana Surf'
+		});
+		expect(addSessionParticipant).toHaveBeenCalledWith({
+			sessionId: 'session-2',
+			bookingParticipantId: 'participant-1',
+			name: 'Ana Surf'
+		});
+		expect(recalcBookingAmounts).toHaveBeenCalledWith('booking-1');
 	});
 });

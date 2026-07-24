@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { createBooking, countEnrolledClientsForService, recalcBookingAmounts } from '$lib/features/bookings/queries';
-import { createSession } from '$lib/features/sessions/queries';
+import { createSession, addParticipant as addSessionParticipant } from '$lib/features/sessions/queries';
 import { setEnrollmentParticipantCount, addParticipant as addEnrollmentParticipant } from '$lib/features/bookings/participants.queries';
 import { calculateAmount } from '$lib/utils/pricing';
 import { listServices, getService } from '$lib/features/services/queries';
@@ -82,20 +82,43 @@ export const actions: Actions = {
 		const clientNameByClientId = Object.fromEntries(clientIds.map((id, i) => [id, clientNames[i] ?? '']));
 		const alsoParticipatesByClientId = Object.fromEntries(clientIds.map((id, i) => [id, alsoParticipatesFlags[i] ?? false]));
 
-		async function autoCreateParticipants(booking: { clients: { id: string; clientId: string; clientFirstName: string }[] }) {
-			await Promise.all(
+		async function autoCreateParticipants(
+			booking: { clients: { id: string; clientId: string; clientFirstName: string }[] }
+		): Promise<{ id: string; name: string }[]> {
+			const rows = await Promise.all(
 				booking.clients.map(async (bc) => {
+					const created: { id: string; name: string }[] = [];
 					const count = participantCountByClientId[bc.clientId] ?? 1;
 					const alsoParticipates = alsoParticipatesByClientId[bc.clientId] ?? false;
 					const fullName = clientNameByClientId[bc.clientId] || bc.clientFirstName || '';
 
 					if (alsoParticipates) {
-						if (fullName) await addEnrollmentParticipant(bc.id, fullName);
-						if (count > 1) await setEnrollmentParticipantCount(bc.id, count, bc.clientFirstName ?? undefined);
+						if (fullName) created.push(await addEnrollmentParticipant(bc.id, fullName));
+						if (count > 1) created.push(...await setEnrollmentParticipantCount(bc.id, count, bc.clientFirstName ?? undefined));
 					} else if (count > 1) {
-						await setEnrollmentParticipantCount(bc.id, count, bc.clientFirstName ?? undefined);
+						created.push(...await setEnrollmentParticipantCount(bc.id, count, bc.clientFirstName ?? undefined));
 					}
+					return created;
 				})
+			);
+			return [...new Map(rows.flat().map((p) => [p.id, p])).values()];
+		}
+
+		async function syncParticipantsToCreatedSessions(
+			sessions: { id: string }[],
+			participants: { id: string; name: string }[]
+		): Promise<void> {
+			if (sessions.length === 0 || participants.length === 0) return;
+			await Promise.all(
+				sessions.flatMap((session) =>
+					participants.map((participant) =>
+						addSessionParticipant({
+							sessionId: session.id,
+							bookingParticipantId: participant.id,
+							name: participant.name
+						})
+					)
+				)
 			);
 		}
 
@@ -186,8 +209,9 @@ export const actions: Actions = {
 				clients: bookingClients
 			});
 
+			let createdSessions: { id: string }[] = [];
 			if (isScheduledNow) {
-				await createSession({
+				const scheduledSession = await createSession({
 					ownerType: 'booking',
 					bookingId: booking.id,
 					date,
@@ -196,21 +220,23 @@ export const actions: Actions = {
 					instructorIds,
 					sortOrder: 0
 				});
+				createdSessions = [scheduledSession];
 				if (sessionsIncluded > 1) {
-					await Promise.all(
+					createdSessions.push(...await Promise.all(
 						Array.from({ length: sessionsIncluded - 1 }, (_, i) =>
 							createSession({ ownerType: 'booking', bookingId: booking.id, date, sortOrder: i + 1 })
 						)
-					);
+					));
 				}
 			} else {
-				await Promise.all(
+				createdSessions = await Promise.all(
 					Array.from({ length: sessionsIncluded }, (_, i) =>
 						createSession({ ownerType: 'booking', bookingId: booking.id, date, sortOrder: i })
 					)
 				);
 			}
-			await autoCreateParticipants(booking);
+			const createdParticipants = await autoCreateParticipants(booking);
+			await syncParticipantsToCreatedSessions(createdSessions, createdParticipants);
 			await recalcBookingAmounts(booking.id);
 
 			return {
