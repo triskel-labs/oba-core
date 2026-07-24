@@ -1,4 +1,5 @@
 import type { ServiceModules } from './modules';
+import type { PricingMode } from './types';
 
 export type ServiceWorkflowArchetype =
 	| 'private_lesson'
@@ -120,15 +121,46 @@ export function classifyServiceWorkflow(modules: ServiceModules = {}): ServiceWo
 	return 'simple_booking';
 }
 
+export type ServiceWorkflowInput = {
+	id?: string;
+	type?: string | null;
+	modules?: ServiceModules | null;
+	pricingMode?: PricingMode | null;
+	defaultSessionsIncluded?: number | null;
+};
+
+function hasSessionPricingSignal(service: ServiceWorkflowInput): boolean {
+	return service.pricingMode === 'per_session' || service.pricingMode === 'per_person_per_session';
+}
+
+export function classifyServiceWorkflowForService(service: ServiceWorkflowInput): ServiceWorkflowArchetype {
+	const modules = service.modules ?? {};
+	const baseClassification = classifyServiceWorkflow(modules);
+
+	if (baseClassification !== 'simple_booking') return baseClassification;
+
+	// Legacy Tipiti/OBA services can carry the old lesson/category + session pricing
+	// shape without the new `sessions` module. Treat those as private lessons so
+	// booking creation offers the session scheduling flow instead of a plain date.
+	if (service.type === 'lesson' && hasSessionPricingSignal(service)) return 'private_lesson';
+
+	return baseClassification;
+}
+
 export function getServiceWorkflowMetadata(modules: ServiceModules = {}): ServiceWorkflowMetadata {
 	return WORKFLOW_METADATA[classifyServiceWorkflow(modules)];
 }
 
 export function getServiceWorkflowMetadataByServiceId(
-	services: { id: string; modules: ServiceModules }[]
+	services: ServiceWorkflowInput[]
 ): Record<string, ServiceWorkflowMetadata> {
 	return Object.fromEntries(
-		services.map((service) => [service.id, getServiceWorkflowMetadata(service.modules)])
+		services
+			.filter((service): service is ServiceWorkflowInput & { id: string } => Boolean(service.id))
+			.map((service) => [
+				service.id,
+				WORKFLOW_METADATA[classifyServiceWorkflowForService(service)]
+			])
 	);
 }
 

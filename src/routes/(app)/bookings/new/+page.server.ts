@@ -10,7 +10,7 @@ import { listEditionsForService, countEnrolledClientsForEdition, getServiceEditi
 import type { ServiceEdition } from '$lib/features/services/editions.types';
 import type { Actions, PageServerLoad } from './$types';
 import { requireRole } from '$lib/server/permissions';
-import { getServiceWorkflowMetadataByServiceId } from '$lib/features/services/workflow';
+import { classifyServiceWorkflowForService, getServiceWorkflowMetadataByServiceId } from '$lib/features/services/workflow';
 
 export const load: PageServerLoad = async ({ url, locals }) => {
 	requireRole(locals, 'admin', 'owner', 'manager');
@@ -46,6 +46,9 @@ export const actions: Actions = {
 
 		const service = await getService(serviceId);
 		if (!service) return fail(400, { error: 'Service not found' });
+
+		const serviceWorkflow = classifyServiceWorkflowForService(service);
+		const isPrivateLessonWorkflow = serviceWorkflow === 'private_lesson';
 
 		const clientIds = form.getAll('clientId').map(String).filter(Boolean);
 		if (clientIds.length === 0) return fail(400, { error: 'At least one client is required' });
@@ -163,7 +166,7 @@ export const actions: Actions = {
 			const edition = await getServiceEdition(serviceEditionId);
 			if (edition) { date = edition.startDate; dateEnd = edition.endDate; }
 		}
-		if ('sessions' in (service.modules ?? {}) && sessionScheduleMode === 'scheduled') {
+		if ((isPrivateLessonWorkflow || 'sessions' in (service.modules ?? {})) && sessionScheduleMode === 'scheduled') {
 			date = scheduledSessionDate;
 		}
 		if (!date) return fail(400, { error: 'Date is required' });
@@ -171,7 +174,7 @@ export const actions: Actions = {
 		// ── Capacity check ─────────────────────────────────────────────────────
 		const totalParticipantsRequested = participantCounts.reduce((s, n) => s + n, 0);
 
-		if ('roster' in (service.modules ?? {}) && serviceEditionId) {
+		if (!isPrivateLessonWorkflow && 'roster' in (service.modules ?? {}) && serviceEditionId) {
 			const edition = await getServiceEdition(serviceEditionId);
 			if (edition?.maxCapacity) {
 				const enrolled  = await countEnrolledClientsForEdition(serviceEditionId);
@@ -179,7 +182,7 @@ export const actions: Actions = {
 				if (totalParticipantsRequested > available)
 					return fail(400, { error: `Solo quedan ${available} plaza${available !== 1 ? 's' : ''} en esta edición` });
 			}
-		} else if ('roster' in (service.modules ?? {}) && service.maxCapacity) {
+		} else if (!isPrivateLessonWorkflow && 'roster' in (service.modules ?? {}) && service.maxCapacity) {
 			const enrolled  = await countEnrolledClientsForService(serviceId);
 			const available = service.maxCapacity - enrolled;
 			if (totalParticipantsRequested > available)
@@ -192,7 +195,7 @@ export const actions: Actions = {
 
 		// ── Lessons (sessions module) ──────────────────────────────────────────
 		// Private lessons can be left unscheduled or scheduled from the create-booking modal.
-		if ('sessions' in (service.modules ?? {})) {
+		if (isPrivateLessonWorkflow || 'sessions' in (service.modules ?? {})) {
 			const sessionsIncluded = service.defaultSessionsIncluded ?? 1;
 			const isScheduledNow = sessionScheduleMode === 'scheduled';
 			const sessionTime = form.get('sessionTime')?.toString() || undefined;

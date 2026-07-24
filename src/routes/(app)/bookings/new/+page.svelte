@@ -18,12 +18,13 @@
 	let selectedServiceId = $state(data.defaultServiceId || (data.services[0]?.id ?? ''));
 	const selectedService = $derived(data.services.find(s => s.id === selectedServiceId));
 	const modules = $derived(selectedService?.modules ?? {});
+	const selectedWorkflow = $derived(selectedServiceId ? data.workflowByServiceId[selectedServiceId] : undefined);
 	const hasEditions   = $derived('editions' in modules);
-	const hasSessions   = $derived('sessions' in modules);
+	const hasSessions   = $derived('sessions' in modules || selectedWorkflow?.archetype === 'private_lesson');
 	const hasInventory  = $derived('inventory' in modules);
 	const hasInstructor = $derived('instructor' in modules);
 	const hasCredits    = $derived('credits' in modules);
-	const isPrivateLessonScheduling = $derived(hasSessions && !hasEditions && !('roster' in modules));
+	const isPrivateLessonScheduling = $derived(selectedWorkflow?.archetype === 'private_lesson');
 	const showDateField = $derived(!hasSessions && !hasEditions);
 	const showTimeField = $derived(!hasSessions && !hasEditions && !hasInventory);
 	const showInstructor = $derived(hasInstructor && !hasSessions);

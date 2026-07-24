@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	classifyServiceWorkflow,
+	classifyServiceWorkflowForService,
 	getServiceWorkflowMetadata,
 	getServiceWorkflowMetadataByServiceId,
 	getServiceWorkflowPresentation
@@ -46,7 +47,7 @@ describe('classifyServiceWorkflow', () => {
 		expect(metadata.operatorQuestion).toBe('choose_run');
 	});
 
-	it('describes group classes as shared service sessions with session/date capacity', () => {
+	it('keeps roster plus sessions as group classes', () => {
 		const metadata = getServiceWorkflowMetadata({ sessions: {}, roster: {} });
 
 		expect(metadata.archetype).toBe('group_class');
@@ -54,6 +55,18 @@ describe('classifyServiceWorkflow', () => {
 		expect(metadata.sessionOwner).toBe('service');
 		expect(metadata.capacityScope).toBe('session_date');
 		expect(metadata.operatorQuestion).toBe('choose_or_create_session');
+	});
+
+	it('treats legacy lesson-priced services without sessions module as private lessons', () => {
+		const metadata = classifyServiceWorkflowForService({
+			id: 'legacy-private',
+			type: 'lesson',
+			modules: { roster: {} },
+			pricingMode: 'per_person_per_session',
+			defaultSessionsIncluded: 1
+		});
+
+		expect(metadata).toBe('private_lesson');
 	});
 
 	it('builds workflow metadata keyed by service id for UI load data', () => {
