@@ -6,6 +6,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { DOT_COLORS } from '$lib/features/services/colors';
 	import type { ServiceColorKey } from '$lib/features/services/colors';
+	import { calculateBookingCreateAmount } from '$lib/features/bookings/createPricing';
 	import type { PageData } from './$types';
 	import type { ServiceEdition } from '$lib/features/services/editions.types';
 	import ClientSearchInput from '$lib/components/ClientSearchInput.svelte';
@@ -73,11 +74,7 @@
 		if (!inventoryNeedsDateRange || !invCheckIn || !invCheckOut) return 1;
 		return Math.max(1, Math.round((new Date(invCheckOut).getTime() - new Date(invCheckIn).getTime()) / 86_400_000));
 	}
-	const invCalculatedAmount = $derived(
-		invCheckIn && invCheckOut && inventoryNeedsDateRange
-			? (parseFloat(selectedService?.basePrice ?? '0') * calcInvUnits()).toFixed(2)
-			: (selectedService?.basePrice ?? '0')
-	);
+	const invCalculatedAmount = $derived(calcAmountDue());
 
 	// ── Credits ───────────────────────────────────────────────────────────────
 	let packQuantity = $state(1);
@@ -101,10 +98,15 @@
 
 	// ── Price preview ─────────────────────────────────────────────────────────
 	function calcAmountDue(): string {
-		if (hasInventory && inventoryNeedsDateRange) return invCalculatedAmount;
-		if (hasCredits && packQuantity > 1)
-			return (parseFloat(selectedService?.basePrice ?? '0') * packQuantity).toFixed(2);
-		return selectedService?.basePrice ?? '0';
+		return calculateBookingCreateAmount({
+			basePrice: selectedService?.basePrice,
+			pricingMode: selectedService?.pricingMode,
+			participantCount,
+			sessionsIncluded: selectedService?.defaultSessionsIncluded ?? 1,
+			days: hasInventory && inventoryNeedsDateRange ? calcInvUnits() : 1,
+			quantity: hasCredits ? packQuantity : 1,
+			isCreditsService: hasCredits
+		});
 	}
 	const pricePreview = $derived(calcAmountDue());
 
