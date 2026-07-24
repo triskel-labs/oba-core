@@ -135,6 +135,12 @@ function hasSessionPricingSignal(service: ServiceWorkflowInput): boolean {
 
 export function classifyServiceWorkflowForService(service: ServiceWorkflowInput): ServiceWorkflowArchetype {
 	const modules = service.modules ?? {};
+
+	// Private lessons can carry operational inventory metadata for included gear.
+	// Session ownership still defines the booking workflow, so do not let inventory
+	// turn a lesson with sessions into an accommodation/rental workflow.
+	if (service.type === 'lesson' && modules.sessions && !modules.roster) return 'private_lesson';
+
 	const baseClassification = classifyServiceWorkflow(modules);
 
 	if (baseClassification !== 'simple_booking') return baseClassification;
