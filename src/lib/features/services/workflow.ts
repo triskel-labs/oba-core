@@ -49,6 +49,13 @@ export type ServiceWorkflowMetadata = {
 	operatorQuestion: WorkflowOperatorQuestion;
 };
 
+export type ServiceWorkflowPresentation = {
+	label: string;
+	operatorPrompt: string;
+	ownership: string;
+	capacity: string;
+};
+
 const WORKFLOW_METADATA: Record<ServiceWorkflowArchetype, ServiceWorkflowMetadata> = {
 	private_lesson: {
 		archetype: 'private_lesson',
@@ -123,4 +130,49 @@ export function getServiceWorkflowMetadataByServiceId(
 	return Object.fromEntries(
 		services.map((service) => [service.id, getServiceWorkflowMetadata(service.modules)])
 	);
+}
+
+const WORKFLOW_PRESENTATION: Record<ServiceWorkflowArchetype, ServiceWorkflowPresentation> = {
+	private_lesson: {
+		label: 'Clase privada',
+		operatorPrompt: 'Programa las sesiones privadas después de crear la reserva.',
+		ownership: 'Sesiones propias de esta reserva',
+		capacity: 'Capacidad por reserva/sesión'
+	},
+	group_class: {
+		label: 'Clase de grupo',
+		operatorPrompt: 'Elige o crea la sesión de grupo a la que se apuntan los participantes.',
+		ownership: 'Sesiones compartidas del servicio',
+		capacity: 'Capacidad por sesión y fecha'
+	},
+	camp_course_run: {
+		label: 'Campamento / curso',
+		operatorPrompt: 'Elige la edición o run donde se inscriben los participantes.',
+		ownership: 'Sesiones propias de la edición/run',
+		capacity: 'Capacidad de la edición/run'
+	},
+	rental_equipment_accommodation: {
+		label: 'Reserva de recurso',
+		operatorPrompt: 'Reserva fechas y recurso; la asignación exacta se confirma después.',
+		ownership: 'Sin sesiones; reserva de inventario/recurso',
+		capacity: 'Capacidad por recurso y fecha'
+	},
+	credit_pack: {
+		label: 'Bono / créditos',
+		operatorPrompt: 'Vende el bono; no crea trabajo de calendario por sí mismo.',
+		ownership: 'Sin sesiones; derecho comercial del cliente',
+		capacity: 'Sin capacidad operativa'
+	},
+	simple_booking: {
+		label: 'Reserva simple',
+		operatorPrompt: 'Confirma el registro comercial sin workflow operativo especial.',
+		ownership: 'Sin sesiones dedicadas',
+		capacity: 'Sin capacidad operativa'
+	}
+};
+
+export function getServiceWorkflowPresentation(
+	metadata: ServiceWorkflowMetadata
+): ServiceWorkflowPresentation {
+	return WORKFLOW_PRESENTATION[metadata.archetype];
 }

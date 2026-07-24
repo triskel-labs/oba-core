@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	classifyServiceWorkflow,
 	getServiceWorkflowMetadata,
-	getServiceWorkflowMetadataByServiceId
+	getServiceWorkflowMetadataByServiceId,
+	getServiceWorkflowPresentation
 } from './workflow';
 
 const creditsConfig = {
@@ -66,6 +67,22 @@ describe('classifyServiceWorkflow', () => {
 			private: { archetype: 'private_lesson', operatorQuestion: 'schedule_private_sessions' },
 			group: { archetype: 'group_class', operatorQuestion: 'choose_or_create_session' },
 			pack: { archetype: 'credit_pack', operatorQuestion: 'sell_credits' }
+		});
+	});
+
+	it('translates metadata into operator-facing booking copy instead of raw module names', () => {
+		expect(getServiceWorkflowPresentation(getServiceWorkflowMetadata({ sessions: {} }))).toMatchObject({
+			label: 'Clase privada',
+			operatorPrompt: 'Programa las sesiones privadas después de crear la reserva.',
+			ownership: 'Sesiones propias de esta reserva',
+			capacity: 'Capacidad por reserva/sesión'
+		});
+
+		expect(getServiceWorkflowPresentation(getServiceWorkflowMetadata({ sessions: {}, roster: {} }))).toMatchObject({
+			label: 'Clase de grupo',
+			operatorPrompt: 'Elige o crea la sesión de grupo a la que se apuntan los participantes.',
+			ownership: 'Sesiones compartidas del servicio',
+			capacity: 'Capacidad por sesión y fecha'
 		});
 	});
 });
