@@ -69,6 +69,18 @@ describe('classifyServiceWorkflow', () => {
 		expect(metadata).toBe('private_lesson');
 	});
 
+	it('keeps lesson services with sessions and operational inventory in the private lesson workflow', () => {
+		const metadata = classifyServiceWorkflowForService({
+			id: 'private-with-kit',
+			type: 'lesson',
+			modules: { sessions: { durationMinutes: 90 }, inventory: { perParticipant: true }, instructor: { required: true } },
+			pricingMode: 'per_person_per_session',
+			defaultSessionsIncluded: 1
+		});
+
+		expect(metadata).toBe('private_lesson');
+	});
+
 	it('builds workflow metadata keyed by service id for UI load data', () => {
 		expect(
 			getServiceWorkflowMetadataByServiceId([

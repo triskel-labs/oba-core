@@ -256,29 +256,6 @@
 					{/if}
 				</div>
 
-			{:else if hasInventory && inventoryNeedsDateRange}
-				<div class="border-t border-blue-100 pt-3 space-y-2">
-					<div class="grid grid-cols-2 gap-2">
-						<div>
-							<p class="mb-1 text-[10px] text-gray-500">Check-in</p>
-							<input name="date" type="date" required bind:value={invCheckIn} class="input w-full text-xs" />
-						</div>
-						<div>
-							<p class="mb-1 text-[10px] text-gray-500">Check-out</p>
-							<input name="dateEnd" type="date" required bind:value={invCheckOut} class="input w-full text-xs" />
-						</div>
-					</div>
-					{#if invCheckIn && invCheckOut && invCheckIn < invCheckOut}
-						<p class="text-[11px] text-muted">{calcInvUnits()} {inventoryPricingMode === 'per_night' ? 'noches' : 'días'} × €{selectedService?.basePrice} = <strong>€{invCalculatedAmount}</strong></p>
-					{/if}
-				</div>
-
-			{:else if hasInventory}
-				<div class="border-t border-blue-100 pt-3">
-					<p class="mb-1 text-[10px] text-gray-500">Fecha</p>
-					<input name="date" type="date" required bind:value={invCheckIn} class="input w-full text-xs" />
-				</div>
-
 			{:else if isPrivateLessonScheduling}
 				<input type="hidden" name="date" value={sessionScheduleMode === 'scheduled' && scheduledSessionDate ? scheduledSessionDate : today} />
 				<input type="hidden" name="sessionScheduleMode" value={sessionScheduleMode} />
@@ -333,6 +310,29 @@
 							📅 La sesión queda sin programar y se resuelve desde el detalle.
 						</p>
 					{/if}
+				</div>
+
+			{:else if hasInventory && inventoryNeedsDateRange}
+				<div class="border-t border-blue-100 pt-3 space-y-2">
+					<div class="grid grid-cols-2 gap-2">
+						<div>
+							<p class="mb-1 text-[10px] text-gray-500">Check-in</p>
+							<input name="date" type="date" required bind:value={invCheckIn} class="input w-full text-xs" />
+						</div>
+						<div>
+							<p class="mb-1 text-[10px] text-gray-500">Check-out</p>
+							<input name="dateEnd" type="date" required bind:value={invCheckOut} class="input w-full text-xs" />
+						</div>
+					</div>
+					{#if invCheckIn && invCheckOut && invCheckIn < invCheckOut}
+						<p class="text-[11px] text-muted">{calcInvUnits()} {inventoryPricingMode === 'per_night' ? 'noches' : 'días'} × €{selectedService?.basePrice} = <strong>€{invCalculatedAmount}</strong></p>
+					{/if}
+				</div>
+
+			{:else if hasInventory}
+				<div class="border-t border-blue-100 pt-3">
+					<p class="mb-1 text-[10px] text-gray-500">Fecha</p>
+					<input name="date" type="date" required bind:value={invCheckIn} class="input w-full text-xs" />
 				</div>
 
 			{:else if hasSessions}
