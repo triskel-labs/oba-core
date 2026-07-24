@@ -6,6 +6,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import { DOT_COLORS } from '$lib/features/services/colors';
 	import type { ServiceColorKey } from '$lib/features/services/colors';
+	import { getServiceWorkflowPresentation } from '$lib/features/services/workflow';
 	import type { PageData } from './$types';
 	import type { ServiceEdition } from '$lib/features/services/editions.types';
 	import ClientSearchInput from '$lib/components/ClientSearchInput.svelte';
@@ -16,6 +17,10 @@
 	// ── Service ───────────────────────────────────────────────────────────────
 	let selectedServiceId = $state(data.defaultServiceId || (data.services[0]?.id ?? ''));
 	const selectedService = $derived(data.services.find(s => s.id === selectedServiceId));
+	const selectedWorkflow = $derived(selectedServiceId ? data.workflowByServiceId[selectedServiceId] : undefined);
+	const workflowPresentation = $derived(
+		selectedWorkflow ? getServiceWorkflowPresentation(selectedWorkflow) : null
+	);
 	const modules = $derived(selectedService?.modules ?? {});
 	const hasEditions   = $derived('editions' in modules);
 	const hasSessions   = $derived('sessions' in modules);
@@ -110,7 +115,7 @@
 				<h1 class="text-xl font-bold text-navy">Nueva reserva</h1>
 			</div>
 			<p class="mt-0.5 text-sm text-muted">
-				{#if hasSessions}Sesiones desde el detalle{:else if hasEditions}Campamento / programa{:else}Servicio puntual{/if}
+				{workflowPresentation?.label ?? 'Servicio puntual'}
 			</p>
 		</div>
 	</div>
@@ -152,11 +157,23 @@
 			</select>
 
 			{#if selectedService}
-				<div class="flex flex-wrap gap-1">
-					{#each Object.keys(modules) as mod}
-						<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-semibold capitalize text-blue-700">{mod}</span>
-					{/each}
-				</div>
+				{#if workflowPresentation && selectedWorkflow}
+					<div class="rounded-xl border border-blue-100 bg-white/80 p-3 text-[11px] text-blue-950 shadow-sm">
+						<div class="mb-2 flex flex-wrap items-center gap-1.5">
+							<span class="rounded-full bg-ocean/10 px-2 py-0.5 text-[10px] font-bold text-ocean">
+								{workflowPresentation.label}
+							</span>
+							<span class="rounded-full bg-sand px-2 py-0.5 text-[10px] font-semibold text-muted">
+								{selectedWorkflow.bookingAction.replaceAll('_', ' ')}
+							</span>
+						</div>
+						<p class="font-medium leading-snug">{workflowPresentation.operatorPrompt}</p>
+						<div class="mt-2 grid gap-1 text-[10px] text-muted">
+							<p><span class="font-semibold text-blue-800">Ownership:</span> {workflowPresentation.ownership}</p>
+							<p><span class="font-semibold text-blue-800">Capacidad:</span> {workflowPresentation.capacity}</p>
+						</div>
+					</div>
+				{/if}
 				<p class="text-[10px] text-gray-500">€{selectedService.basePrice} · {selectedService.pricingMode}</p>
 			{/if}
 
