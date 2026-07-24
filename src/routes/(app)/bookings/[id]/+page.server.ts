@@ -57,7 +57,7 @@ import { listInstructors } from '$lib/features/instructors/queries';
 import { listClients } from '$lib/features/clients/queries';
 import type { BookingStatus } from '$lib/features/bookings/types';
 import type { Actions, PageServerLoad } from './$types';
-import { requireRole, canSeeFinancials } from '$lib/server/permissions';
+import { requireRole, canRecordPayment, canSeeFinancials } from '$lib/server/permissions';
 import { listLinksForService } from '$lib/features/inventory/serviceLinks.queries';
 import {
 	listItemsByType,
@@ -72,7 +72,7 @@ import {
 	assignParticipantToAllocation
 } from '$lib/features/inventory/allocations.queries';
 import type { AllocationStatus } from '$lib/features/inventory/types';
-import type { PaymentStatus } from '$lib/features/bookings/types';
+import { derivePaymentStatus } from '$lib/features/bookings/payment';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	requireRole(locals, 'admin', 'owner', 'manager');
@@ -161,6 +161,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		allDateSessions: [],
 		sessionOwnerType,
 		canSeeFinancials: canSeeFinancials(locals),
+		canRecordPayment: canRecordPayment(locals),
 		userRole: locals.user?.role ?? '',
 		itemsByAllocType,
 		allocTypeTracking,
@@ -206,16 +207,24 @@ export const actions: Actions = {
 		return { error: null, message: 'Notas guardadas' };
 	},
 
-	updatePayment: async ({ request, locals }) => {
+	updatePayment: async ({ request, params, locals }) => {
 		requireRole(locals, 'admin', 'owner', 'manager');
+		if (!canRecordPayment(locals))
+			return fail(403, { error: 'No tienes permiso para registrar pagos' });
 		const form = await request.formData();
 		const bookingClientId = form.get('bookingClientId')?.toString() ?? '';
 		const amountPaid = form.get('amountPaid')?.toString() ?? '0';
-		const amountDue = parseFloat(form.get('amountDue')?.toString() ?? '0');
-		const paid = parseFloat(amountPaid);
-		const status = paid >= amountDue ? 'paid' : paid > 0 ? 'partial' : 'pending';
 		if (!bookingClientId) return fail(400, { error: 'Missing booking client id' });
-		await updateBookingClientPayment(bookingClientId, amountPaid, status);
+
+		const booking = await getBooking(params.id);
+		const bookingClient = booking?.clients.find((client) => client.id === bookingClientId);
+		if (!bookingClient) return fail(404, { error: 'Booking client not found' });
+
+		await updateBookingClientPayment(
+			bookingClientId,
+			amountPaid,
+			derivePaymentStatus(amountPaid, bookingClient.amountDue)
+		);
 		return { error: null, message: 'Payment updated' };
 	},
 
@@ -799,7 +808,7 @@ export const actions: Actions = {
 		const basePrice = parseFloat(booking.serviceBasePrice ?? '0');
 		if (basePrice > 0) {
 			const newAmount = (basePrice * quantity).toFixed(2);
-			for (const bc of booking.clients.filter(c => c.status === 'enrolled')) {
+			for (const bc of booking.clients.filter((c) => c.status === 'enrolled')) {
 				await updateBookingClientAmountDue(bc.id, newAmount);
 			}
 		}
@@ -813,7 +822,10 @@ export const actions: Actions = {
 		const rawNames = form.get('names')?.toString() ?? '';
 		const syncToSessions = form.get('syncToSessions') === 'true';
 		if (!bookingClientId) return fail(400, { error: 'bookingClientId required' });
-		const names = rawNames.split('\n').map(n => n.trim()).filter(Boolean);
+		const names = rawNames
+			.split('\n')
+			.map((n) => n.trim())
+			.filter(Boolean);
 		if (names.length === 0) return fail(400, { error: 'No names provided' });
 
 		const newParticipants = await bulkAddParticipants(bookingClientId, names);
@@ -822,9 +834,9 @@ export const actions: Actions = {
 			if (booking) {
 				const sessions = await listSessionsForContext(booking);
 				await Promise.all(
-					sessions.map(s =>
+					sessions.map((s) =>
 						Promise.all(
-							newParticipants.map(p =>
+							newParticipants.map((p) =>
 								addParticipant({ sessionId: s.id, name: p.name, bookingParticipantId: p.id })
 							)
 						)
@@ -858,17 +870,35 @@ export const actions: Actions = {
 		return { error: null, message: 'Participante eliminado' };
 	},
 
-	updateParticipantPayment: async ({ request, locals }) => {
+	updateParticipantPayment: async ({ request, params, locals }) => {
 		requireRole(locals, 'admin', 'owner', 'manager');
+		if (!canRecordPayment(locals))
+			return fail(403, { error: 'No tienes permiso para registrar pagos' });
 		const form = await request.formData();
 		const participantId = form.get('participantId')?.toString() ?? '';
 		const amountPaidStr = form.get('amountPaid')?.toString() ?? '0';
-		const amountDue = parseFloat(form.get('amountDue')?.toString() ?? '0');
 		if (!participantId) return fail(400, { error: 'participantId required' });
-		const paid = parseFloat(amountPaidStr);
-		const paymentStatus: PaymentStatus =
-			paid >= amountDue ? 'paid' : paid > 0 ? 'partial' : 'pending';
-		await updateParticipantPayment(participantId, amountPaidStr, paymentStatus);
+
+		const booking = await getBooking(params.id);
+		if (!booking) return fail(404, { error: 'Booking not found' });
+
+		let amountDue: string | null = null;
+		for (const enrollment of booking.clients) {
+			const participants = await listParticipantsForEnrollment(enrollment.id);
+			if (participants.some((participant) => participant.id === participantId)) {
+				amountDue = (parseFloat(enrollment.amountDue) / Math.max(participants.length, 1)).toFixed(
+					2
+				);
+				break;
+			}
+		}
+		if (amountDue === null) return fail(404, { error: 'Participant not found' });
+
+		await updateParticipantPayment(
+			participantId,
+			amountPaidStr,
+			derivePaymentStatus(amountPaidStr, amountDue)
+		);
 		return { error: null, message: 'Pago actualizado' };
 	},
 

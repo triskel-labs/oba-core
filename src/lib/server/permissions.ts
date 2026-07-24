@@ -7,14 +7,14 @@ const VALID_ROLES = new Set<string>(['admin', 'owner', 'manager', 'instructor'])
 
 export function userRoles(locals: App.Locals): Role[] {
 	const arr = locals.user?.roles;
-	if (arr && arr.length > 0) return arr.filter(r => VALID_ROLES.has(r)) as Role[];
+	if (arr && arr.length > 0) return arr.filter((r) => VALID_ROLES.has(r)) as Role[];
 	const single = locals.user?.role;
 	return single && VALID_ROLES.has(single) ? [single as Role] : [];
 }
 
 export function hasRole(locals: App.Locals, ...roles: Role[]): boolean {
 	const list = userRoles(locals);
-	return roles.some(r => list.includes(r));
+	return roles.some((r) => list.includes(r));
 }
 
 export function requireRole(locals: App.Locals, ...roles: Role[]): void {
@@ -31,9 +31,20 @@ export function canManageStaff(locals: App.Locals): boolean {
 	return hasRole(locals, 'admin', 'owner');
 }
 
-export function canSeeFinancials(locals: App.Locals): boolean {
+export function canViewFinancialReports(locals: App.Locals): boolean {
 	return hasRole(locals, 'admin', 'owner');
 }
+
+/**
+ * Operational payment collection is not the same as full financial reporting.
+ * Managers can record money collected during day-to-day operations without
+ * getting owner/admin-only report access.
+ */
+export function canRecordPayment(locals: App.Locals): boolean {
+	return hasRole(locals, 'admin', 'owner', 'manager');
+}
+
+export const canSeeFinancials = canViewFinancialReports;
 
 export function canEditServices(locals: App.Locals): boolean {
 	return hasRole(locals, 'admin', 'owner');

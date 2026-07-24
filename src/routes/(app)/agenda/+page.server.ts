@@ -4,7 +4,8 @@ import { bookingClients, bookings } from '$lib/server/db/schema';
 import { isInstructorRole } from '$lib/server/permissions';
 import { listSessionsForDate, listSessionsForDateRange } from '$lib/features/sessions/queries';
 import { listEventsForDateRange } from '$lib/features/events/queries';
-import { listBookingsForDateRange } from '$lib/features/bookings/queries';
+import { listBookingsForDateRange, listAllBookings } from '$lib/features/bookings/queries';
+import { buildAttentionCards } from '$lib/features/attention/rules';
 import { getTodayString, formatDate } from '$lib/features/calendar/utils';
 import type { PageServerLoad } from './$types';
 
@@ -37,29 +38,40 @@ export const load: PageServerLoad = async ({ locals }) => {
 		instructorId = locals.user!.id;
 	}
 
-	const [todaySessions, upcomingSessions, upcomingBookings, upcomingEvents, stats] = await Promise.all([
+	const [
+		todaySessions,
+		upcomingSessions,
+		upcomingBookings,
+		bookingsForAttention,
+		upcomingEvents,
+		stats
+	] = await Promise.all([
 		listSessionsForDate(today, instructorId),
 		listSessionsForDateRange(today, futureDateStr, instructorId),
 		listBookingsForDateRange(today, futureDateStr),
+		isInstructorRole(locals)
+			? Promise.resolve([])
+			: listAllBookings({ from: today, to: futureDateStr }),
 		listEventsForDateRange(today, futureDateStr),
 		loadStats(today)
 	]);
 
 	// Active camps: roster bookings currently running (dateEnd >= today) and not cancelled
 	const activeCamps = upcomingBookings.filter(
-		b => b.serviceHasRoster && b.dateEnd && b.status !== 'cancelled' && b.dateEnd >= today
+		(b) => b.serviceHasRoster && b.dateEnd && b.status !== 'cancelled' && b.dateEnd >= today
 	);
 
 	// Unscheduled upcoming sessions (exclude today's — shown separately)
 	const unscheduledUpcoming = upcomingSessions.filter(
-		s => s.status === 'unscheduled' && s.date > today
+		(s) => s.status === 'unscheduled' && s.date > today
 	);
 
-	const scheduledToday = todaySessions.filter(s => s.status === 'scheduled').length;
-	const unscheduledToday = todaySessions.filter(s => s.status === 'unscheduled').length;
+	const scheduledToday = todaySessions.filter((s) => s.status === 'scheduled').length;
+	const unscheduledToday = todaySessions.filter((s) => s.status === 'unscheduled').length;
 
 	// Next 3 upcoming events
-	const nextEvents = upcomingEvents.filter(e => e.startDate >= today).slice(0, 3);
+	const nextEvents = upcomingEvents.filter((e) => e.startDate >= today).slice(0, 3);
+	const attentionCards = buildAttentionCards({ today, bookings: bookingsForAttention });
 
 	return {
 		today,
@@ -68,6 +80,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		unscheduledToday,
 		unscheduledUpcoming,
 		activeCamps,
+		attentionCards,
 		nextEvents,
 		stats: {
 			pendingRevenue: stats.pendingRevenue,
