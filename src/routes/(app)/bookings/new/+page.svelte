@@ -22,6 +22,7 @@
 	const hasInventory  = $derived('inventory' in modules);
 	const hasInstructor = $derived('instructor' in modules);
 	const hasCredits    = $derived('credits' in modules);
+	const isPrivateLessonScheduling = $derived(hasSessions && !hasEditions && !('roster' in modules));
 	const showDateField = $derived(!hasSessions && !hasEditions);
 	const showTimeField = $derived(!hasSessions && !hasEditions && !hasInventory);
 	const showInstructor = $derived(hasInstructor && !hasSessions);
@@ -54,6 +55,12 @@
 	let date = $state(data.defaultDate || today);
 	let time = $state(data.defaultTime ?? '');
 	let isFlexible = $state((data.defaultTime ?? '') === '');
+	let sessionScheduleMode = $state<'later' | 'scheduled'>('later');
+	let sessionModalOpen = $state(false);
+	let scheduledSessionDate = $state(data.defaultDate || today);
+	let scheduledSessionTime = $state(data.defaultTime ?? '');
+	let scheduledSessionDuration = $state(60);
+	let scheduledSessionInstructorId = $state('');
 	let invCheckIn = $state('');
 	let invCheckOut = $state('');
 
@@ -75,6 +82,15 @@
 	// ── Credits ───────────────────────────────────────────────────────────────
 	let packQuantity = $state(1);
 	$effect(() => { if (!hasCredits) packQuantity = 1; });
+	$effect(() => {
+		if (!isPrivateLessonScheduling) {
+			sessionScheduleMode = 'later';
+			sessionModalOpen = false;
+		}
+		if (selectedService?.durationMinutes && sessionScheduleMode === 'later') {
+			scheduledSessionDuration = selectedService.durationMinutes;
+		}
+	});
 
 	// ── Client ────────────────────────────────────────────────────────────────
 	let selectedClient = $state<{ clientId: string; name: string } | null>(null);
@@ -260,6 +276,62 @@
 					<input name="date" type="date" required bind:value={invCheckIn} class="input w-full text-xs" />
 				</div>
 
+			{:else if isPrivateLessonScheduling}
+				<input type="hidden" name="date" value={sessionScheduleMode === 'scheduled' && scheduledSessionDate ? scheduledSessionDate : today} />
+				<input type="hidden" name="sessionScheduleMode" value={sessionScheduleMode} />
+				{#if sessionScheduleMode === 'scheduled'}
+					<input type="hidden" name="sessionDate" value={scheduledSessionDate} />
+					<input type="hidden" name="sessionTime" value={scheduledSessionTime} />
+					<input type="hidden" name="sessionDuration" value={scheduledSessionDuration} />
+					{#if scheduledSessionInstructorId}
+						<input type="hidden" name="sessionInstructorId" value={scheduledSessionInstructorId} />
+					{/if}
+				{:else}
+					<input type="hidden" name="isFlexible" value="on" />
+				{/if}
+
+				<div class="border-t border-blue-100 pt-3 space-y-2">
+					<p class="text-[10px] font-semibold text-gray-500">¿Cuándo es la clase?</p>
+					<div class="grid grid-cols-2 gap-2">
+						<button
+							type="button"
+							onclick={() => { sessionScheduleMode = 'later'; sessionModalOpen = false; }}
+							class="rounded-xl border px-3 py-2 text-left text-xs transition
+								{sessionScheduleMode === 'later' ? 'border-ocean bg-ocean/5 text-ocean ring-2 ring-ocean/15' : 'border-blue-100 bg-white text-muted hover:border-ocean/40'}"
+						>
+							<span class="block font-bold">Decidir fecha luego</span>
+							<span class="mt-0.5 block text-[10px] leading-snug opacity-80">Queda pendiente para seguimiento.</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => { sessionScheduleMode = 'scheduled'; sessionModalOpen = true; }}
+							class="rounded-xl border px-3 py-2 text-left text-xs transition
+								{sessionScheduleMode === 'scheduled' ? 'border-green-600 bg-green-50 text-green-700 ring-2 ring-green-600/15' : 'border-blue-100 bg-white text-muted hover:border-green-400'}"
+						>
+							<span class="block font-bold">Programar ahora</span>
+							<span class="mt-0.5 block text-[10px] leading-snug opacity-80">Crear la sesión con fecha.</span>
+						</button>
+					</div>
+
+					{#if sessionScheduleMode === 'scheduled'}
+						<button
+							type="button"
+							onclick={() => { sessionModalOpen = true; }}
+							class="w-full rounded-lg bg-white px-3 py-2 text-left text-[11px] text-muted ring-1 ring-green-100 hover:ring-green-300"
+						>
+							<strong class="text-green-700">Sesión:</strong>
+							{scheduledSessionDate}{scheduledSessionTime ? ` · ${scheduledSessionTime}` : ''}
+							{scheduledSessionDuration ? ` · ${scheduledSessionDuration} min` : ''}
+							{scheduledSessionInstructorId ? ' · instructor asignado' : ''}
+							<span class="float-right font-semibold text-green-700">Editar</span>
+						</button>
+					{:else}
+						<p class="rounded-lg bg-sand px-3 py-2 text-[11px] text-muted">
+							📅 La sesión queda sin programar y se resuelve desde el detalle.
+						</p>
+					{/if}
+				</div>
+
 			{:else if hasSessions}
 				<input type="hidden" name="date" value={today} />
 				<input type="hidden" name="isFlexible" value="on" />
@@ -392,7 +464,7 @@
 
 	<!-- CTA -->
 	<div class="flex items-center gap-4 pt-2">
-		<button type="submit" disabled={loading || !selectedClient}
+		<button type="submit" disabled={loading || !selectedClient || (isPrivateLessonScheduling && sessionScheduleMode === 'scheduled' && !scheduledSessionDate)}
 			class="btn-primary px-8 py-2.5 text-sm font-semibold">
 			{loading ? 'Creando...' : 'Crear reserva →'}
 		</button>
@@ -400,6 +472,80 @@
 			<p class="text-xs text-muted">Selecciona un cliente para continuar</p>
 		{/if}
 	</div>
+
+	{#if sessionModalOpen && isPrivateLessonScheduling}
+		<div
+			class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+			onclick={() => { sessionModalOpen = false; }}
+			role="presentation"
+		></div>
+		<div class="fixed inset-x-4 top-[5%] z-50 mx-auto max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl md:inset-x-auto md:left-1/2 md:w-full md:-translate-x-1/2">
+			<div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+				<div>
+					<h2 class="text-sm font-bold text-gray-900">Programar sesión</h2>
+					<p class="mt-0.5 text-xs text-gray-400">Crear una nueva sesión para esta reserva</p>
+				</div>
+				<button
+					type="button"
+					onclick={() => { sessionModalOpen = false; }}
+					class="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 text-sm text-gray-400 hover:bg-gray-50"
+				>✕</button>
+			</div>
+
+			<div class="flex border-b border-gray-100 bg-gray-50">
+				<button type="button" class="flex-1 border-b-2 border-green-600 bg-white py-2.5 text-xs font-semibold text-green-700">
+					+ Nueva sesión
+				</button>
+			</div>
+
+			<div class="space-y-4 p-5">
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="mb-1 block text-xs text-gray-500" for="scheduled-session-date">Fecha</label>
+						<input id="scheduled-session-date" type="date" bind:value={scheduledSessionDate} required class="input w-full text-sm" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs text-gray-500" for="scheduled-session-time">Hora</label>
+						<input id="scheduled-session-time" type="time" bind:value={scheduledSessionTime} class="input w-full text-sm" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs text-gray-500" for="scheduled-session-duration">Duración (min)</label>
+						<input id="scheduled-session-duration" type="number" min="15" step="15" bind:value={scheduledSessionDuration} class="input w-full text-sm" />
+					</div>
+				</div>
+
+				{#if data.instructors.length > 0}
+					<div>
+						<label class="mb-2 block text-xs text-gray-500" for="scheduled-session-instructor">Instructor</label>
+						<select id="scheduled-session-instructor" bind:value={scheduledSessionInstructorId} class="input w-full text-sm">
+							<option value="">Sin asignar</option>
+							{#each data.instructors as inst (inst.id)}
+								<option value={inst.id}>{inst.name}</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+
+				<div class="flex gap-2">
+					<button
+						type="button"
+						onclick={() => { sessionModalOpen = false; }}
+						disabled={!scheduledSessionDate}
+						class="btn-primary flex-1"
+					>
+						Guardar programación
+					</button>
+					<button
+						type="button"
+						onclick={() => { sessionScheduleMode = 'later'; sessionModalOpen = false; }}
+						class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+					>
+						Decidir luego
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	</form>
 

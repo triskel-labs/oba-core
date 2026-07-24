@@ -132,11 +132,16 @@ export const actions: Actions = {
 
 		// ── Shared date resolution ─────────────────────────────────────────────
 		const serviceEditionId = form.get('serviceEditionId')?.toString() || undefined;
+		const sessionScheduleMode = form.get('sessionScheduleMode')?.toString() ?? 'later';
+		const scheduledSessionDate = form.get('sessionDate')?.toString() ?? '';
 		let date    = form.get('date')?.toString() ?? '';
 		let dateEnd = form.get('dateEnd')?.toString() || undefined;
 		if ('editions' in (service.modules ?? {}) && serviceEditionId) {
 			const edition = await getServiceEdition(serviceEditionId);
 			if (edition) { date = edition.startDate; dateEnd = edition.endDate; }
+		}
+		if ('sessions' in (service.modules ?? {}) && sessionScheduleMode === 'scheduled') {
+			date = scheduledSessionDate;
 		}
 		if (!date) return fail(400, { error: 'Date is required' });
 
@@ -163,32 +168,56 @@ export const actions: Actions = {
 			return fail(400, { error: 'Selecciona una edición para continuar' });
 
 		// ── Lessons (sessions module) ──────────────────────────────────────────
-		// Auto-create N unscheduled sessions from service default.
-		// Sessions are scheduled from the booking detail page.
+		// Private lessons can be left unscheduled or scheduled from the create-booking modal.
 		if ('sessions' in (service.modules ?? {})) {
 			const sessionsIncluded = service.defaultSessionsIncluded ?? 1;
+			const isScheduledNow = sessionScheduleMode === 'scheduled';
+			const sessionTime = form.get('sessionTime')?.toString() || undefined;
+			const durRaw = form.get('sessionDuration')?.toString();
+			const durationMinutes = durRaw ? parseInt(durRaw) : undefined;
+			const instructorIds = form.getAll('sessionInstructorId').map(String).filter(Boolean);
 
 			const booking = await createBooking({
 				serviceId, quantity, serviceEditionId, date,
-				isFlexible: true,
+				isFlexible: !isScheduledNow,
 				status: 'confirmed',
 				sessionsIncluded,
 				spotNotes, notes,
 				clients: bookingClients
 			});
 
-			await Promise.all(
-				Array.from({ length: sessionsIncluded }, (_, i) =>
-					createSession({ ownerType: 'booking', bookingId: booking.id, date, sortOrder: i })
-				)
-			);
+			if (isScheduledNow) {
+				await createSession({
+					ownerType: 'booking',
+					bookingId: booking.id,
+					date,
+					time: sessionTime,
+					durationMinutes,
+					instructorIds,
+					sortOrder: 0
+				});
+				if (sessionsIncluded > 1) {
+					await Promise.all(
+						Array.from({ length: sessionsIncluded - 1 }, (_, i) =>
+							createSession({ ownerType: 'booking', bookingId: booking.id, date, sortOrder: i + 1 })
+						)
+					);
+				}
+			} else {
+				await Promise.all(
+					Array.from({ length: sessionsIncluded }, (_, i) =>
+						createSession({ ownerType: 'booking', bookingId: booking.id, date, sortOrder: i })
+					)
+				);
+			}
 			await autoCreateParticipants(booking);
 			await recalcBookingAmounts(booking.id);
 
-			const n = sessionsIncluded;
 			return {
 				bookingId: booking.id,
-				message: `Booking created — ${n} session${n !== 1 ? 's' : ''} to schedule`
+				message: isScheduledNow
+					? 'Booking created — session scheduled'
+					: `Booking created — ${sessionsIncluded} session${sessionsIncluded !== 1 ? 's' : ''} to schedule`
 			};
 		}
 
