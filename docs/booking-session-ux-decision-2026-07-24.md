@@ -53,23 +53,20 @@ Private lesson creation should support two paths:
    - Follow-up happens from booking detail / Today cockpit.
 
 2. **Schedule during creation**
-   - Operator already knows one or more dates.
-   - UI allows adding one or multiple session rows:
-     - date;
-     - optional time;
-     - optional instructor;
-     - optional duration override.
-   - OBA creates one booking-owned session per row.
+   - Operator already knows the intended session date/time.
+   - UI should reuse the existing session-picker modal pattern instead of inline session rows.
+   - For private lessons, the modal starts from the “new session” path because sessions are booking-owned.
+   - OBA creates the booking and then creates the booking-owned session(s) from the modal selection.
    - Booking participants sync into those sessions.
 
 Default recommendation: show this as a simple mobile-first choice after service selection:
 
 ```txt
 When is the lesson?
-[ Decide later ] [ Pick date(s) now ]
+[ Decide later ] [ Programar ahora ]
 ```
 
-If `Pick date(s) now`, reveal repeatable session date rows. Do not force a full calendar widget until needed.
+If `Programar ahora`, open a modal using the same visual language as the current booking-detail session modal. For the first implementation, support one new scheduled private session from the modal. Add multiple-session scheduling only after the single-session flow is stable.
 
 ### Group class
 
@@ -145,13 +142,16 @@ Update `/bookings/new` for services with `sessions` but no `roster`/`editions`:
 - add a mobile-first choice:
   - `Decidir fecha luego`;
   - `Programar ahora`;
-- when `Programar ahora`, allow repeatable simple session rows using native inputs first:
-  - date;
+- when `Programar ahora`, open a reusable scheduling modal based on the existing booking-detail `SessionPickerModal` visual pattern;
+- first implementation should submit one scheduled private session from the modal:
+  - date required;
   - time optional;
-- server action creates sessions from submitted rows instead of always creating unscheduled sessions anchored to hidden today;
+  - duration optional/defaulted;
+  - instructor optional;
+- server action creates sessions from the submitted modal fields instead of always creating unscheduled sessions anchored to hidden today;
 - participant/session sync can be merged after this because the trigger point is clearer.
 
-Use existing project Svelte/Tailwind style first. Check Bits UI / shadcn-svelte only if native inputs become a UX blocker.
+Use existing project Svelte/Tailwind style first. Do not add Bits UI / shadcn-svelte for this slice unless the current modal pattern becomes a blocker.
 
 ### Then
 
@@ -161,7 +161,7 @@ Use existing project Svelte/Tailwind style first. Check Bits UI / shadcn-svelte 
 
 ## 7. Open questions for Dave review
 
-1. For private lessons, should the default button be `Decidir fecha luego` or `Programar ahora`?
-2. When scheduling multiple private session dates during creation, do we need times immediately or just dates first?
+1. For private lessons, should the default be `Decidir fecha luego` or `Programar ahora`?
+2. Should the first `Programar ahora` implementation support one scheduled session only, then add multiple sessions later?
 3. Should unassigned group-class bookings be allowed in normal flow, or only via an “I don’t know yet” escape hatch?
 4. Should booking list cards show “unscheduled” more prominently for session-based services?
