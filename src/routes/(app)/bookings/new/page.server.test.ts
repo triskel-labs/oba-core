@@ -29,6 +29,15 @@ vi.mock('$lib/features/services/queries', () => ({
 			name: 'Group class',
 			modules: { sessions: {}, roster: {} },
 			color: 'sand'
+		},
+		{
+			id: 'legacy-private-lesson',
+			name: 'Clase Privada Surf',
+			type: 'lesson',
+			modules: { roster: {} },
+			pricingMode: 'per_person_per_session',
+			defaultSessionsIncluded: 1,
+			color: 'orange'
 		}
 	]),
 	getService: vi.fn()
@@ -96,6 +105,10 @@ describe('new booking load workflow metadata', () => {
 			'group-class': {
 				archetype: 'group_class',
 				operatorQuestion: 'choose_or_create_session'
+			},
+			'legacy-private-lesson': {
+				archetype: 'private_lesson',
+				operatorQuestion: 'schedule_private_sessions'
 			}
 		});
 	});
@@ -191,5 +204,44 @@ describe('new booking private lesson scheduling and participant sync', () => {
 			name: 'Ana Surf'
 		});
 		expect(recalcBookingAmounts).toHaveBeenCalledWith('booking-1');
+	});
+
+	it('treats legacy lesson-priced services as private scheduling services even when sessions module is missing', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'legacy-private-lesson',
+			name: 'Clase Privada Surf',
+			type: 'lesson',
+			modules: { roster: {} },
+			basePrice: '60.00',
+			pricingMode: 'per_person_per_session',
+			defaultSessionsIncluded: 1
+		} as any);
+		vi.mocked(createBooking).mockResolvedValue({
+			id: 'booking-1',
+			clients: [{ id: 'booking-client-1', clientId: 'client-1', clientFirstName: 'Ana' }]
+		} as any);
+		vi.mocked(createSession).mockResolvedValueOnce({ id: 'session-1' } as any);
+		vi.mocked(addEnrollmentParticipant).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' } as any);
+
+		const form = baseBookingForm({
+			serviceId: 'legacy-private-lesson',
+			sessionScheduleMode: 'scheduled',
+			sessionDate: '2026-08-03',
+			sessionTime: '10:30'
+		});
+
+		await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+			ownerType: 'booking',
+			bookingId: 'booking-1',
+			date: '2026-08-03',
+			time: '10:30'
+		}));
+		expect(addSessionParticipant).toHaveBeenCalledWith({
+			sessionId: 'session-1',
+			bookingParticipantId: 'participant-1',
+			name: 'Ana Surf'
+		});
 	});
 });
