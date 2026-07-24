@@ -81,6 +81,18 @@ describe('classifyServiceWorkflow', () => {
 		expect(metadata).toBe('private_lesson');
 	});
 
+	it('keeps roster lesson services with sessions and operational inventory in the group class workflow', () => {
+		const metadata = classifyServiceWorkflowForService({
+			id: 'group-with-kit',
+			type: 'lesson',
+			modules: { sessions: { durationMinutes: 90 }, roster: {}, inventory: { perParticipant: true }, instructor: { required: true } },
+			pricingMode: 'per_person_per_session',
+			defaultSessionsIncluded: 1
+		});
+
+		expect(metadata).toBe('group_class');
+	});
+
 	it('builds workflow metadata keyed by service id for UI load data', () => {
 		expect(
 			getServiceWorkflowMetadataByServiceId([
