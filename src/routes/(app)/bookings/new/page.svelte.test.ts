@@ -79,6 +79,23 @@ describe('/bookings/new private lesson scheduling UI', () => {
 });
 
 describe('/bookings/new group lesson session choice UI', () => {
+	it('shows an empty-state create-session button when no existing group session is available', async () => {
+		render(NewBookingPage, {
+			data: {
+				...baseData,
+				services: [groupClassService],
+				defaultServiceId: 'group-class',
+				sessionsByServiceId: {}
+			} as any
+		});
+
+		await expect.element(page.getByText(/No hay sesiones futuras para este servicio/)).toBeInTheDocument();
+		await page.getByRole('button', { name: /Crear sesión para esta fecha/ }).click();
+
+		await expect.element(page.getByRole('heading', { name: 'Nueva sesión de grupo' })).toBeInTheDocument();
+		await expect.element(page.getByText(/Nueva sesión de grupo preparada/)).toBeInTheDocument();
+	});
+
 	it('allows creating a new reusable group session instead of attaching to an existing one', async () => {
 		render(NewBookingPage, {
 			data: {

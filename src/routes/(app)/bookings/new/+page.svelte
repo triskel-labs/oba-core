@@ -347,9 +347,16 @@
 								</p>
 							{/if}
 						{:else}
-							<p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
-								No hay sesiones futuras para este servicio. Puedes crear una nueva sesión compartida ahora.
-							</p>
+							<div class="space-y-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 ring-1 ring-amber-100">
+								<p>No hay sesiones futuras para este servicio. Puedes crear una nueva sesión compartida ahora.</p>
+								<button
+									type="button"
+									onclick={() => { groupSessionMode = 'new'; sessionModalOpen = true; }}
+									class="w-full rounded-lg bg-amber-600 px-3 py-2 text-left text-xs font-bold text-white shadow-sm hover:bg-amber-700"
+								>
+									Crear sesión para esta fecha →
+								</button>
+							</div>
 						{/if}
 					{:else}
 						<button
