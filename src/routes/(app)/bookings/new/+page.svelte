@@ -39,7 +39,8 @@
 	const isGroupSessionBooking = $derived(selectedWorkflow?.archetype === 'group_class');
 	const groupSessions = $derived(selectedServiceId ? (dataWithSessions.sessionsByServiceId[selectedServiceId] ?? []) : []);
 	let selectedGroupSessionId = $state('');
-	const selectedGroupSession = $derived(groupSessions.find((session) => session.id === selectedGroupSessionId));
+	let groupSessionMode = $state<'existing' | 'new'>('existing');
+	const selectedGroupSession = $derived(groupSessionMode === 'existing' ? groupSessions.find((session) => session.id === selectedGroupSessionId) : undefined);
 	const showDateField = $derived(!hasSessions && !hasEditions);
 	const showTimeField = $derived(!hasSessions && !hasEditions && !hasInventory);
 	const showInstructor = $derived(hasInstructor && !hasSessions);
@@ -96,13 +97,14 @@
 	let packQuantity = $state(1);
 	$effect(() => { if (!hasCredits) packQuantity = 1; });
 	$effect(() => {
-		if (!isPrivateLessonScheduling) {
+		if (!isPrivateLessonScheduling && !(isGroupSessionBooking && groupSessionMode === 'new')) {
 			sessionScheduleMode = 'later';
 			sessionModalOpen = false;
 		}
 		if (!isGroupSessionBooking) {
 			selectedGroupSessionId = '';
-		} else if (selectedGroupSessionId && !groupSessions.some((session) => session.id === selectedGroupSessionId)) {
+			groupSessionMode = 'existing';
+		} else if (groupSessionMode === 'existing' && selectedGroupSessionId && !groupSessions.some((session) => session.id === selectedGroupSessionId)) {
 			selectedGroupSessionId = '';
 		}
 		if (selectedService?.durationMinutes && sessionScheduleMode === 'later') {
@@ -290,34 +292,77 @@
 
 
 			{:else if isGroupSessionBooking}
-				<input type="hidden" name="date" value={selectedGroupSession?.date ?? today} />
-				{#if selectedGroupSession}
+				<input type="hidden" name="groupSessionMode" value={groupSessionMode} />
+				<input type="hidden" name="date" value={groupSessionMode === 'new' ? scheduledSessionDate : (selectedGroupSession?.date ?? today)} />
+				{#if groupSessionMode === 'existing' && selectedGroupSession}
 					<input type="hidden" name="sessionId" value={selectedGroupSession.id} />
+				{:else if groupSessionMode === 'new'}
+					<input type="hidden" name="sessionDate" value={scheduledSessionDate} />
+					<input type="hidden" name="sessionTime" value={scheduledSessionTime} />
+					<input type="hidden" name="sessionDuration" value={scheduledSessionDuration} />
+					{#if scheduledSessionInstructorId}
+						<input type="hidden" name="sessionInstructorId" value={scheduledSessionInstructorId} />
+					{/if}
 				{/if}
-				<div class="border-t border-blue-100 pt-3 space-y-2">
+				<div class="space-y-3 border-t border-blue-100 pt-3">
 					<p class="text-[10px] font-semibold text-gray-500">Sesión de grupo</p>
-					{#if groupSessions.length > 0}
-						<select
-							bind:value={selectedGroupSessionId}
-							required
-							class="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-xs focus:border-ocean focus:outline-none"
+					<div class="grid grid-cols-2 gap-2">
+						<button
+							type="button"
+							onclick={() => { groupSessionMode = 'existing'; sessionModalOpen = false; }}
+							class="rounded-xl border px-3 py-2 text-left text-xs transition
+								{groupSessionMode === 'existing' ? 'border-ocean bg-ocean/5 text-ocean ring-2 ring-ocean/15' : 'border-blue-100 bg-white text-muted hover:border-ocean/40'}"
 						>
-							<option value="">Seleccionar sesión...</option>
-							{#each groupSessions as session (session.id)}
-								<option value={session.id} disabled={session.slotsLeft !== null && session.slotsLeft <= 0}>
-									{session.date}{session.time ? ` · ${session.time}` : ''}{session.durationMinutes ? ` · ${session.durationMinutes} min` : ''}{session.maxCapacity !== null ? ` · ${session.enrolledCount}/${session.maxCapacity} plazas` : ''}
-								</option>
-							{/each}
-						</select>
-						{#if selectedGroupSession}
-							<p class="rounded-lg bg-sand px-3 py-2 text-[11px] text-muted">
-								👥 La reserva se asignará a esta sesión y sus participantes contarán contra la capacidad{selectedGroupSession.slotsLeft !== null ? ` (${selectedGroupSession.slotsLeft} libres)` : ''}.
+							<span class="block font-bold">Apuntar a sesión existente</span>
+							<span class="mt-0.5 block text-[10px] leading-snug opacity-80">Usa un hueco ya abierto.</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => { groupSessionMode = 'new'; sessionModalOpen = true; }}
+							class="rounded-xl border px-3 py-2 text-left text-xs transition
+								{groupSessionMode === 'new' ? 'border-green-600 bg-green-50 text-green-700 ring-2 ring-green-600/15' : 'border-blue-100 bg-white text-muted hover:border-green-400'}"
+						>
+							<span class="block font-bold">Crear nueva sesión</span>
+							<span class="mt-0.5 block text-[10px] leading-snug opacity-80">Abre un hueco reutilizable.</span>
+						</button>
+					</div>
+
+					{#if groupSessionMode === 'existing'}
+						{#if groupSessions.length > 0}
+							<select
+								bind:value={selectedGroupSessionId}
+								required
+								class="w-full rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-xs focus:border-ocean focus:outline-none"
+							>
+								<option value="">Seleccionar sesión...</option>
+								{#each groupSessions as session (session.id)}
+									<option value={session.id} disabled={session.slotsLeft !== null && session.slotsLeft <= 0}>
+										{session.date}{session.time ? ` · ${session.time}` : ''}{session.durationMinutes ? ` · ${session.durationMinutes} min` : ''}{session.maxCapacity !== null ? ` · ${session.enrolledCount}/${session.maxCapacity} plazas` : ''}
+									</option>
+								{/each}
+							</select>
+							{#if selectedGroupSession}
+								<p class="rounded-lg bg-sand px-3 py-2 text-[11px] text-muted">
+									👥 La reserva se asignará a esta sesión y sus participantes contarán contra la capacidad{selectedGroupSession.slotsLeft !== null ? ` (${selectedGroupSession.slotsLeft} libres)` : ''}.
+								</p>
+							{/if}
+						{:else}
+							<p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
+								No hay sesiones futuras para este servicio. Puedes crear una nueva sesión compartida ahora.
 							</p>
 						{/if}
 					{:else}
-						<p class="rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
-							No hay sesiones futuras para este servicio. Crea una sesión desde el servicio antes de apuntar participantes.
-						</p>
+						<button
+							type="button"
+							onclick={() => { sessionModalOpen = true; }}
+							class="w-full rounded-lg bg-white px-3 py-2 text-left text-[11px] text-muted ring-1 ring-green-100 hover:ring-green-300"
+						>
+							<strong class="text-green-700">Nueva sesión:</strong>
+							{scheduledSessionDate}{scheduledSessionTime ? ` · ${scheduledSessionTime}` : ''}
+							{scheduledSessionDuration ? ` · ${scheduledSessionDuration} min` : ''}
+							{scheduledSessionInstructorId ? ' · instructor asignado' : ''}
+							<span class="float-right font-semibold text-green-700">Editar</span>
+						</button>
 					{/if}
 				</div>
 
@@ -532,7 +577,7 @@
 
 	<!-- CTA -->
 	<div class="flex items-center gap-4 pt-2">
-		<button type="submit" disabled={loading || !selectedClient || (isPrivateLessonScheduling && sessionScheduleMode === 'scheduled' && !scheduledSessionDate) || (isGroupSessionBooking && !selectedGroupSessionId)}
+		<button type="submit" disabled={loading || !selectedClient || (isPrivateLessonScheduling && sessionScheduleMode === 'scheduled' && !scheduledSessionDate) || (isGroupSessionBooking && groupSessionMode === 'existing' && !selectedGroupSessionId) || (isGroupSessionBooking && groupSessionMode === 'new' && !scheduledSessionDate)}
 			class="btn-primary px-8 py-2.5 text-sm font-semibold">
 			{loading ? 'Creando...' : 'Crear reserva →'}
 		</button>
@@ -542,7 +587,7 @@
 	</div>
 </form>
 
-{#if sessionModalOpen && isPrivateLessonScheduling}
+{#if sessionModalOpen && (isPrivateLessonScheduling || (isGroupSessionBooking && groupSessionMode === 'new'))}
 		<div
 			class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
 			onclick={() => { sessionModalOpen = false; }}
@@ -551,8 +596,8 @@
 		<div class="fixed inset-x-4 top-[5%] z-50 mx-auto max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl md:inset-x-auto md:left-1/2 md:w-full md:-translate-x-1/2">
 			<div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
 				<div>
-					<h2 class="text-sm font-bold text-gray-900">Programar sesión</h2>
-					<p class="mt-0.5 text-xs text-gray-400">Crear una nueva sesión para esta reserva</p>
+					<h2 class="text-sm font-bold text-gray-900">{isGroupSessionBooking ? 'Nueva sesión de grupo' : 'Programar sesión'}</h2>
+					<p class="mt-0.5 text-xs text-gray-400">{isGroupSessionBooking ? 'Crear una sesión compartida para este servicio' : 'Crear una nueva sesión para esta reserva'}</p>
 				</div>
 				<button
 					type="button"
@@ -606,10 +651,10 @@
 					</button>
 					<button
 						type="button"
-						onclick={() => { sessionScheduleMode = 'later'; sessionModalOpen = false; }}
+						onclick={() => { if (isGroupSessionBooking) groupSessionMode = 'existing'; else sessionScheduleMode = 'later'; sessionModalOpen = false; }}
 						class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-50"
 					>
-						Decidir luego
+						{isGroupSessionBooking ? 'Usar existente' : 'Decidir luego'}
 					</button>
 				</div>
 			</div>
@@ -631,6 +676,14 @@
 				</div>
 			{:else if isPrivateLessonScheduling}
 				<p class="text-sm italic text-muted">Sesión pendiente: se resolverá desde el detalle de reserva.</p>
+			{:else if isGroupSessionBooking && groupSessionMode === 'new'}
+				<div class="rounded-lg bg-white/80 px-3 py-2 text-sm text-gray-700 ring-1 ring-green-100">
+					<p class="font-semibold text-green-700">Nueva sesión de grupo preparada</p>
+					<p class="mt-0.5 text-xs text-muted">
+						{scheduledSessionDate}{scheduledSessionTime ? ` · ${scheduledSessionTime}` : ''}{scheduledSessionDuration ? ` · ${scheduledSessionDuration} min` : ''}{scheduledSessionInstructorId ? ' · instructor asignado' : ''}
+					</p>
+					<p class="mt-1 text-[11px] text-muted">Se creará como sesión compartida del servicio y esta reserva quedará vinculada.</p>
+				</div>
 			{:else if isGroupSessionBooking && selectedGroupSession}
 				<div class="rounded-lg bg-white/80 px-3 py-2 text-sm text-gray-700 ring-1 ring-green-100">
 					<p class="font-semibold text-green-700">Sesión seleccionada</p>

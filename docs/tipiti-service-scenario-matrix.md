@@ -143,7 +143,7 @@ Important: these are not normal Tipiti-owned bookings. They behave like **blocke
 
 These questions should be answered before building too much logic:
 
-1. For group classes, do Patri/Cris create fixed class slots first, or do they collect people and then decide slots based on tides/weather?
+1. For group classes, Patri/Cris can either reuse a fixed class slot or create the shared slot at booking time when demand/tides/weather require it. OBA should make attach-existing the default and create-new explicit; both produce a reusable service-owned session.
 2. When a customer asks for “mañana/tarde”, how granular is the real scheduling decision?
 3. Does max 6 apply strictly per instructor, per class, or per slot with multiple instructors possible?
 4. For private class of 1–5 people, is 60€ always total, or does it change at higher participant counts/seasons?
