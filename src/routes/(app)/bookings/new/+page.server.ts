@@ -186,6 +186,8 @@ export const actions: Actions = {
 		// ── Shared date resolution ─────────────────────────────────────────────
 		const serviceEditionId = form.get('serviceEditionId')?.toString() || undefined;
 		const sessionScheduleMode = form.get('sessionScheduleMode')?.toString() ?? 'later';
+		const groupSessionMode = form.get('groupSessionMode')?.toString() === 'new' ? 'new' : 'existing';
+		const createsNewGroupSession = isGroupClassWorkflow && groupSessionMode === 'new';
 		const scheduledSessionDate = form.get('sessionDate')?.toString() ?? '';
 		let date    = form.get('date')?.toString() ?? '';
 		let dateEnd = form.get('dateEnd')?.toString() || undefined;
@@ -193,7 +195,7 @@ export const actions: Actions = {
 			const edition = await getServiceEdition(serviceEditionId);
 			if (edition) { date = edition.startDate; dateEnd = edition.endDate; }
 		}
-		if ((isPrivateLessonWorkflow || isGroupClassWorkflow) && sessionScheduleMode === 'scheduled') {
+		if ((isPrivateLessonWorkflow && sessionScheduleMode === 'scheduled') || createsNewGroupSession) {
 			date = scheduledSessionDate;
 		}
 		if (!date) return fail(400, { error: 'Date is required' });
@@ -203,16 +205,24 @@ export const actions: Actions = {
 		const selectedSessionId = form.get('sessionId')?.toString() || undefined;
 
 		if (isGroupClassWorkflow) {
-			if (!selectedSessionId) return fail(400, { error: 'Selecciona una sesión para continuar' });
-			try {
-				await assertCanAssignBookingToServiceSession({
-					bookingId: null,
-					serviceId,
-					sessionId: selectedSessionId,
-					requestedParticipants: totalParticipantsRequested
-				});
-			} catch (e) {
-				return fail(400, { error: (e as Error).message });
+			if (createsNewGroupSession) {
+				if (service.maxCapacity && totalParticipantsRequested > service.maxCapacity) {
+					return fail(400, {
+						error: `Solo quedan ${service.maxCapacity} plaza${service.maxCapacity !== 1 ? 's' : ''} en esta sesión`
+					});
+				}
+			} else {
+				if (!selectedSessionId) return fail(400, { error: 'Selecciona una sesión para continuar' });
+				try {
+					await assertCanAssignBookingToServiceSession({
+						bookingId: null,
+						serviceId,
+						sessionId: selectedSessionId,
+						requestedParticipants: totalParticipantsRequested
+					});
+				} catch (e) {
+					return fail(400, { error: (e as Error).message });
+				}
 			}
 		}
 
@@ -293,6 +303,10 @@ export const actions: Actions = {
 		}
 
 		if (isGroupClassWorkflow) {
+			const sessionTime = form.get('sessionTime')?.toString() || undefined;
+			const durRaw = form.get('sessionDuration')?.toString();
+			const durationMinutes = durRaw ? parseInt(durRaw) : service.durationMinutes ?? undefined;
+			const instructorIds = form.getAll('sessionInstructorId').map(String).filter(Boolean);
 			const booking = await createBooking({
 				serviceId,
 				quantity,
@@ -304,13 +318,29 @@ export const actions: Actions = {
 				clients: bookingClients
 			});
 			await autoCreateParticipants(booking);
+			const assignmentSessionId = createsNewGroupSession
+				? (await createSession({
+					ownerType: 'service',
+					serviceId,
+					date,
+					time: sessionTime,
+					durationMinutes,
+					instructorIds,
+					sortOrder: 0
+				})).id
+				: selectedSessionId!;
 			try {
-				await assignBookingToSession(booking.id, selectedSessionId!);
+				await assignBookingToSession(booking.id, assignmentSessionId);
 			} catch (e) {
 				return fail(400, { error: (e as Error).message });
 			}
 			await recalcBookingAmounts(booking.id);
-			return { bookingId: booking.id, message: 'Booking created — assigned to session' };
+			return {
+				bookingId: booking.id,
+				message: createsNewGroupSession
+					? 'Booking created — group session created and assigned'
+					: 'Booking created — assigned to session'
+			};
 		}
 
 		// ── Regular / camp ─────────────────────────────────────────────────────

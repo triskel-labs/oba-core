@@ -139,7 +139,7 @@ This is the current working matrix. It should control feature decisions more tha
 Decision pending:
 
 - `credits` must not mean both “this service sells credits” and “this service accepts credits” forever.
-- Group classes need session-scoped capacity and explicit session assignment; service-wide capacity is not enough.
+- Group classes need session-scoped capacity. Booking creation may either attach to an existing reusable service-owned session or explicitly create a new reusable service-owned session, then assign/sync participants into that session. Service-wide capacity is not enough.
 - Edition/run linkage should become exact through `serviceEditionId`; date-overlap fallback should be repair/audit only.
 
 ---

@@ -325,6 +325,84 @@ describe('new booking group session assignment', () => {
 		expect(recalcBookingAmounts).toHaveBeenCalledWith('booking-1');
 	});
 
+	it('creates a reusable service-owned group session and assigns the booking to it when requested', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'group-class',
+			name: 'Group class',
+			modules: { sessions: {}, roster: {}, instructor: {} },
+			type: 'lesson',
+			basePrice: '35.00',
+			pricingMode: 'per_person',
+			durationMinutes: 90,
+			maxCapacity: 6
+		} as any);
+		vi.mocked(createBooking).mockResolvedValue({
+			id: 'booking-1',
+			clients: [{ id: 'booking-client-1', clientId: 'client-1', clientFirstName: 'Ana' }]
+		} as any);
+		vi.mocked(createSession).mockResolvedValueOnce({ id: 'new-group-session' } as any);
+		vi.mocked(addEnrollmentParticipant).mockResolvedValue({ id: 'participant-1', name: 'Ana Surf' } as any);
+
+		const form = baseBookingForm({
+			serviceId: 'group-class',
+			groupSessionMode: 'new',
+			participantCount: '2',
+			sessionDate: '2026-08-04',
+			sessionTime: '11:00',
+			sessionDuration: '90',
+			sessionInstructorId: 'inst-1'
+		});
+
+		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(result).toMatchObject({ bookingId: 'booking-1' });
+		expect(assertCanAssignBookingToServiceSession).not.toHaveBeenCalled();
+		expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({
+			serviceId: 'group-class',
+			date: '2026-08-04',
+			isFlexible: false,
+			status: 'confirmed'
+		}));
+		expect(createSession).toHaveBeenCalledWith({
+			ownerType: 'service',
+			serviceId: 'group-class',
+			date: '2026-08-04',
+			time: '11:00',
+			durationMinutes: 90,
+			instructorIds: ['inst-1'],
+			sortOrder: 0
+		});
+		expect(assignBookingToSession).toHaveBeenCalledWith('booking-1', 'new-group-session');
+		expect(recalcBookingAmounts).toHaveBeenCalledWith('booking-1');
+	});
+
+	it('returns a form failure before creating records when a new group session would exceed capacity', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'group-class',
+			name: 'Group class',
+			modules: { sessions: {}, roster: {} },
+			type: 'lesson',
+			basePrice: '35.00',
+			pricingMode: 'per_person',
+			maxCapacity: 6
+		} as any);
+
+		const form = baseBookingForm({
+			serviceId: 'group-class',
+			groupSessionMode: 'new',
+			participantCount: '7',
+			sessionDate: '2026-08-04'
+		});
+
+		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(result.status).toBe(400);
+		expect(result.data.error).toBe('Solo quedan 6 plazas en esta sesión');
+		expect(createBooking).not.toHaveBeenCalled();
+		expect(createSession).not.toHaveBeenCalled();
+		expect(assignBookingToSession).not.toHaveBeenCalled();
+	});
+
 	it('returns a form failure before creating the booking when the selected group session is full', async () => {
 		vi.mocked(getService).mockResolvedValue({
 			id: 'group-class',
