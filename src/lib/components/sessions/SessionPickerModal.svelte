@@ -135,9 +135,18 @@
 				<!-- Link existing -->
 				<div class="flex flex-col gap-3 bg-gray-100 p-3">
 					{#if availableSessions.length === 0}
-						<p class="px-2 py-4 text-center text-sm text-gray-400">
-							No hay sesiones disponibles del servicio para vincular.
-						</p>
+						<div class="space-y-3 rounded-xl border border-dashed border-gray-200 bg-white px-3 py-4 text-center">
+							<p class="text-sm text-gray-400">
+								No hay sesiones disponibles del servicio para vincular.
+							</p>
+							<button
+								type="button"
+								onclick={() => (activeTab = 'new')}
+								class="w-full rounded-lg bg-green-600 py-2 text-xs font-bold text-white hover:bg-green-700"
+							>
+								Crear sesión ahora
+							</button>
+						</div>
 					{/if}
 					{#each availableSessions as s (s.id)}
 						{@const taken = s.participants.length}
