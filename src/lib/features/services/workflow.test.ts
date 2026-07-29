@@ -47,6 +47,15 @@ describe('classifyServiceWorkflow', () => {
 		expect(metadata.operatorQuestion).toBe('choose_run');
 	});
 
+	it('treats inventory as additive when a service has session semantics', () => {
+		expect(classifyServiceWorkflow({ sessions: {}, inventory: { perParticipant: true } })).toBe(
+			'private_lesson'
+		);
+		expect(
+			classifyServiceWorkflow({ sessions: {}, roster: {}, inventory: { perParticipant: true } })
+		).toBe('group_class');
+	});
+
 	it('keeps roster plus sessions as group classes', () => {
 		const metadata = getServiceWorkflowMetadata({ sessions: {}, roster: {} });
 

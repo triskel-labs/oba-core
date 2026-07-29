@@ -114,9 +114,9 @@ export function classifyServiceWorkflow(modules: ServiceModules = {}): ServiceWo
 	if (modules.credits) return 'credit_pack';
 
 	if (modules.editions) return 'camp_course_run';
-	if (modules.inventory) return 'rental_equipment_accommodation';
 	if (modules.sessions && modules.roster) return 'group_class';
 	if (modules.sessions) return 'private_lesson';
+	if (modules.inventory) return 'rental_equipment_accommodation';
 
 	return 'simple_booking';
 }

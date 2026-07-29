@@ -12,7 +12,7 @@ import { calculateAmount } from '$lib/utils/pricing';
 import { listServices, getService } from '$lib/features/services/queries';
 import { listInstructors } from '$lib/features/instructors/queries';
 import { listClients } from '$lib/features/clients/queries';
-import { listEditionsForService, countEnrolledClientsForEdition, getServiceEdition } from '$lib/features/services/editions.queries';
+import { listEditionsForService, countEnrolledForEditionOverlap, getServiceEdition } from '$lib/features/services/editions.queries';
 import type { ServiceEdition } from '$lib/features/services/editions.types';
 import type { Actions, PageServerLoad } from './$types';
 import { requireRole } from '$lib/server/permissions';
@@ -152,8 +152,10 @@ export const actions: Actions = {
 			);
 		}
 
-		// ── Accommodation ──────────────────────────────────────────────────────
-		if (!isPrivateLessonWorkflow && !isGroupClassWorkflow && 'inventory' in (service.modules ?? {})) {
+		// ── Accommodation / inventory-only ─────────────────────────────────────
+		// Inventory can be operationally additive on lessons/classes/runs. Only the
+		// resolver's pure inventory workflow should short-circuit into reservation.
+		if (serviceWorkflow === 'rental_equipment_accommodation') {
 			const checkIn  = form.get('date')?.toString() ?? '';
 			const checkOut = form.get('dateEnd')?.toString() || null;
 			if (!checkIn) return fail(400, { error: 'Start date is required' });
@@ -191,9 +193,21 @@ export const actions: Actions = {
 		const scheduledSessionDate = form.get('sessionDate')?.toString() ?? '';
 		let date    = form.get('date')?.toString() ?? '';
 		let dateEnd = form.get('dateEnd')?.toString() || undefined;
-		if ('editions' in (service.modules ?? {}) && serviceEditionId) {
-			const edition = await getServiceEdition(serviceEditionId);
-			if (edition) { date = edition.startDate; dateEnd = edition.endDate; }
+		let selectedEdition: ServiceEdition | undefined;
+
+		if ('editions' in (service.modules ?? {}) && !serviceEditionId)
+			return fail(400, { error: 'Selecciona una edición para continuar' });
+
+		if (serviceEditionId) {
+			selectedEdition = await getServiceEdition(serviceEditionId);
+			if (!selectedEdition) return fail(400, { error: 'Edición no encontrada' });
+			if (selectedEdition.serviceId !== serviceId) {
+				return fail(400, { error: 'Edición no pertenece al servicio seleccionado' });
+			}
+			if ('editions' in (service.modules ?? {})) {
+				date = selectedEdition.startDate;
+				dateEnd = selectedEdition.endDate;
+			}
 		}
 		if ((isPrivateLessonWorkflow && sessionScheduleMode === 'scheduled') || createsNewGroupSession) {
 			date = scheduledSessionDate;
@@ -227,10 +241,13 @@ export const actions: Actions = {
 		}
 
 		if (!isPrivateLessonWorkflow && !isGroupClassWorkflow && 'roster' in (service.modules ?? {}) && serviceEditionId) {
-			const edition = await getServiceEdition(serviceEditionId);
-			if (edition?.maxCapacity) {
-				const enrolled  = await countEnrolledClientsForEdition(serviceEditionId);
-				const available = edition.maxCapacity - enrolled;
+			if (selectedEdition?.maxCapacity) {
+				const enrolled = await countEnrolledForEditionOverlap(
+					serviceId,
+					selectedEdition.startDate,
+					selectedEdition.endDate
+				);
+				const available = selectedEdition.maxCapacity - enrolled;
 				if (totalParticipantsRequested > available)
 					return fail(400, { error: `Solo quedan ${available} plaza${available !== 1 ? 's' : ''} en esta edición` });
 			}
@@ -241,9 +258,7 @@ export const actions: Actions = {
 				return fail(400, { error: `Solo quedan ${available} plaza${available !== 1 ? 's' : ''} disponibles` });
 		}
 
-		// Require edition when service uses editions module and editions exist
-		if ('editions' in (service.modules ?? {}) && !serviceEditionId)
-			return fail(400, { error: 'Selecciona una edición para continuar' });
+		// Edition requirements and ownership are validated during shared date resolution.
 
 		// ── Lessons (sessions module) ──────────────────────────────────────────
 		// Private lessons can be left unscheduled or scheduled from the create-booking modal.
