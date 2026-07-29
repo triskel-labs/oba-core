@@ -67,7 +67,7 @@ vi.mock('$lib/features/clients/queries', () => ({
 
 vi.mock('$lib/features/services/editions.queries', () => ({
 	listEditionsForService: vi.fn(async () => []),
-	countEnrolledClientsForEdition: vi.fn(),
+	countEnrolledForEditionOverlap: vi.fn(),
 	getServiceEdition: vi.fn()
 }));
 
@@ -86,6 +86,7 @@ import {
 } from '$lib/features/sessions/queries';
 import { addParticipant as addEnrollmentParticipant, setEnrollmentParticipantCount } from '$lib/features/bookings/participants.queries';
 import { getService } from '$lib/features/services/queries';
+import { countEnrolledForEditionOverlap, getServiceEdition } from '$lib/features/services/editions.queries';
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -427,5 +428,77 @@ describe('new booking group session assignment', () => {
 		expect(result.data.error).toBe('Solo quedan 1 plaza en esta sesión');
 		expect(createBooking).not.toHaveBeenCalled();
 		expect(assignBookingToSession).not.toHaveBeenCalled();
+	});
+});
+
+describe('new booking edition and additive inventory reconciliation', () => {
+	it('rejects an edition that does not belong to the selected service before creating records', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'camp-service',
+			name: 'Camp service',
+			modules: { editions: {}, roster: {}, sessions: {} },
+			basePrice: '250.00',
+			pricingMode: 'per_person'
+		} as any);
+		vi.mocked(getServiceEdition).mockResolvedValue({
+			id: 'edition-other',
+			serviceId: 'other-service',
+			startDate: '2026-08-10',
+			endDate: '2026-08-14',
+			maxCapacity: null
+		} as any);
+
+		const form = baseBookingForm({
+			serviceId: 'camp-service',
+			serviceEditionId: 'edition-other'
+		});
+
+		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(result.status).toBe(400);
+		expect(result.data.error).toBe('Edición no pertenece al servicio seleccionado');
+		expect(createBooking).not.toHaveBeenCalled();
+	});
+
+	it('keeps inventory additive for edition workflows instead of routing them as pure rentals', async () => {
+		vi.mocked(getService).mockResolvedValue({
+			id: 'camp-service',
+			name: 'Camp service',
+			modules: { editions: {}, roster: {}, sessions: {}, inventory: { perParticipant: true } },
+			basePrice: '250.00',
+			pricingMode: 'per_person'
+		} as any);
+		vi.mocked(getServiceEdition).mockResolvedValue({
+			id: 'edition-1',
+			serviceId: 'camp-service',
+			startDate: '2026-08-10',
+			endDate: '2026-08-14',
+			maxCapacity: 8
+		} as any);
+		vi.mocked(countEnrolledForEditionOverlap).mockResolvedValue(2);
+		vi.mocked(createBooking).mockResolvedValue({
+			id: 'booking-1',
+			clients: [{ id: 'booking-client-1', clientId: 'client-1', clientFirstName: 'Ana' }]
+		} as any);
+
+		const form = baseBookingForm({
+			serviceId: 'camp-service',
+			serviceEditionId: 'edition-1'
+		});
+
+		const result = await (actions.default as any)({ request: bookingRequest(form), locals: {} });
+
+		expect(result).toMatchObject({ bookingId: 'booking-1', message: 'Booking created' });
+		expect(countEnrolledForEditionOverlap).toHaveBeenCalledWith(
+			'camp-service',
+			'2026-08-10',
+			'2026-08-14'
+		);
+		expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({
+			serviceId: 'camp-service',
+			serviceEditionId: 'edition-1',
+			date: '2026-08-10',
+			dateEnd: '2026-08-14'
+		}));
 	});
 });
